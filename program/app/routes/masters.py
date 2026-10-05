@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """現場のマスタ（設備・ロール）の読み書き・マスタの置き場の状態。アクセス権限マスタは access.py。"""
-from flask import current_app, jsonify, request
+from ..web import current_app, jsonify, request
 
 from .common import base_rev, bp, master_call, master_repo
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """版・名乗り・アクセス権限・利用状況。判定は services/access.py の1箇所（ここは渡すだけ）。"""
-from flask import current_app, jsonify, request
+from ..web import current_app, jsonify, request
 
 from ..services import access, presence
 from ..version import APP_VERSION

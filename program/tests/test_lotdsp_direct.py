@@ -109,7 +109,8 @@ class SiteServer(unittest.TestCase):
         app = create_app({"TESTING": True, "MASTER_STORE": MasterStore(ROOT, local_root=Path(tempfile.mkdtemp()), settings={})})
         app.config["APP_SETTINGS"]["lotdsp_import"] = {
             "url": self.url, "only_master_equipment": True,
-            "direct": {"browser": CHROMIUM, "extra_args": EXTRA, "timeout_seconds": 40,
+            # 起動を待つ長さは、遅い機械（CI の起こしたての Linux）で新しいプロファイルの起動が 15 秒前後かかるので延ばす
+            "direct": {"browser": CHROMIUM, "extra_args": EXTRA, "timeout_seconds": 40, "start_timeout_seconds": 40,
                        "search_url": self.url + query + "#/lotdsp"}}
         return app.test_client()
 

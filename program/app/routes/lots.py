@@ -2,7 +2,7 @@
 """ロットの取り込み（LotDsp）と計算。"""
 import time
 
-from flask import current_app, jsonify, render_template, request
+from ..web import current_app, jsonify, render_template, request
 
 from .. import effective_settings
 from ..services import lotdsp_api, lotdsp_direct, lotdsp_link, lotdsp_progress

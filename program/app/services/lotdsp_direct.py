@@ -69,6 +69,9 @@ def settings_of(lotdsp_import):
         "browser": unquote_path(d.get("browser")),
         "timeout_seconds": float(d.get("timeout_seconds", 60)),
         "reach_timeout_seconds": float(d.get("reach_timeout_seconds", 4)),
+        # 起こしたブラウザが DevTools を開くまで待つ長さ。ふつうの PC は 1 秒ほど。遅い機械（CI など）では、新しい
+        # プロファイルでの起動が 15 秒前後かかることがあるので、その環境の設定で延ばせる（既定は今までと同じ 15 秒）
+        "start_timeout_seconds": float(d.get("start_timeout_seconds", 15)),
         "extra_args": [str(a) for a in (d.get("extra_args") or [])],   # 起動に足す引数（既定なし。試験の環境などで使う）
         "keep_seconds": float(d.get("keep_seconds", 300)),   # 読み終わったブラウザを次の検索のために残す長さ（0＝毎回閉じる）
         # LotDsp の窓（ログインが要るとき、利用者がログインする窓）
@@ -269,8 +272,8 @@ def _launch(exe, profile, extra=(), visible=False):
     return subprocess.Popen(args, **kw)
 
 
-def _devtools_port(profile, proc, timeout=15):
-    """起動したブラウザが書く DevToolsActivePort（1行目がポート）を待つ。"""
+def _devtools_port(profile, proc, timeout=15.0):
+    """起動したブラウザが書く DevToolsActivePort（1行目がポート）を待つ（timeout 秒まで）。"""
     f = Path(profile) / "DevToolsActivePort"
     end = time.time() + timeout
     while time.time() < end:
@@ -283,7 +286,8 @@ def _devtools_port(profile, proc, timeout=15):
         except (OSError, ValueError, IndexError):
             pass
         time.sleep(0.1)
-    raise DirectError("browser", "ブラウザの DevTools が開きませんでした（管理者の設定で止められている可能性があります）")
+    raise DirectError("browser", f"ブラウザの DevTools が開きませんでした（{timeout:g} 秒待ちました。管理者の設定で止められているか、"
+                                 "起動に時間がかかっている可能性があります）")
 
 
 def _page_ws(port, timeout=10):
@@ -304,7 +308,7 @@ class _Browser:
     """Edge 1つとそのページ。読み終わっても残し、次の検索で使い回す（起動と LotDsp の画面の読み込みを省く）。
     見えない Edge は一時プロファイルで動かし、閉じるときに消す。LotDsp の窓（visible）は専用のプロファイルを残す。"""
 
-    def __init__(self, exe, extra, visible=False, profile=None):
+    def __init__(self, exe, extra, visible=False, profile=None, start_timeout=15.0):
         self.exe, self.extra, self.visible = exe, tuple(extra), visible
         self.keep_profile = bool(profile)
         if profile:
@@ -317,7 +321,7 @@ class _Browser:
         self.used = time.time()
         try:
             self.proc = _launch(exe, self.profile, self.extra, visible)
-            self.cdp = _Cdp(_page_ws(_devtools_port(self.profile, self.proc)), timeout=10)
+            self.cdp = _Cdp(_page_ws(_devtools_port(self.profile, self.proc, start_timeout)), timeout=10)
         except BaseException:
             self.close()
             raise
@@ -336,6 +340,8 @@ class _Browser:
                 self.proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 self.proc.kill()
+                with contextlib.suppress(subprocess.TimeoutExpired):
+                    self.proc.wait(timeout=5)             # 止めたプロセスを片付ける（残骸を残さない）
             self.proc = None
         if self.keep_profile:
             return
@@ -378,7 +384,8 @@ def _session(cfg, exe, visible=False):
         return b, True
     shutdown()
     _stage("open")
-    b = _Browser(exe, cfg.get("extra_args") or (), visible, cfg["window_profile"] if visible else None)
+    b = _Browser(exe, cfg.get("extra_args") or (), visible, cfg["window_profile"] if visible else None,
+                 cfg.get("start_timeout_seconds", 15))
     with _SESSION_LOCK:
         _SESSION = b
     _window(b, "minimized")                 # 窓はログインが要るときだけ前に出す

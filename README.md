@@ -11,10 +11,10 @@ GitHub の Releases に、版ごとに配る ZIP（`Defect-Analyzer-<版>-window
   Defect-Analyzer.exe        ← 入口（これをダブルクリック。ショートカットもこれへ）
   README.md                  ← この説明
   program\                   ← アプリの中身（触らない）
-  python\                    ← 同梱の Python 3.13 と Flask（触らない）
+  python\                    ← 同梱の Python 3.13（触らない）
 ```
 
-- **各 PC に Python を入れる必要はありません。** 同梱の Python は Python Software Foundation の公式の Windows 用実行環境（NuGet の python パッケージ）から作り、Flask などの部品とともに版と指紋を固定しています。PC に別の版の Python や Flask・環境変数（PYTHONPATH など）があっても、同梱のものだけで動きます。作るたびに、利用者の PC を真似た確かめ（PATH に Python なし）を通してから置きます（[desktop/bundle](desktop/bundle)）。
+- **各 PC に Python を入れる必要はありません。** 同梱の Python は Python Software Foundation の公式の Windows 用実行環境（NuGet の python パッケージ）から作り、版と指紋を固定しています。アプリは版 3.8.0 から Python の標準の部品だけで動きます（Flask などの部品は使いません）。PC に別の版の Python や部品・環境変数（PYTHONPATH など）があっても、同梱のものだけで動きます。作るたびに、利用者の PC を真似た確かめ（PATH に Python なし）を通してから置きます（[desktop/bundle](desktop/bundle)）。
 - `program` の中身: `app`（画面と API）・`sidecar.py`（窓とのつなぎ）・`config`（設定）・`data`（マスタの初期値）・`docs`（仕組みの説明）・`tests`。
 - 利用者ごとの記録やマスタの写し・この PC へ写したアプリ（`app`）・取り込んだ新しい版（`versions`）は `%LOCALAPPDATA%\TransferPitchAnalyzer` にあります。展開したフォルダは BOX・共有フォルダに置いて構いません（アプリはそこへ書き込みません）。
 - 開発で Git を使うときの `.git`・`.gitignore` は配る物に入れません。

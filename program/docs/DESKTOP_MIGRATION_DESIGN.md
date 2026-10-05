@@ -40,7 +40,7 @@ Rust に移したのは「窓とプロセスの世話」と「Python を通す�
    └─ それ以外           → 中身へ渡す
                               │ 標準入出力の枠（desktop/src/frame.rs ⇄ program/sidecar.py）
                               ▼
-                        Python: Flask のアプリを WSGI のまま呼ぶ（ブラウザ版と同じ答え）
+                        Python: アプリ（app/web.py の App.handle）へそのまま渡す（版 3.8.0 で Flask を外した。§ Flask を外す）
 ```
 
 - **枠**: ヘッダー JSON 1行（`len` が本文のバイト数）＋本文そのまま。base64 にしないので大きな一覧でも膨らまない。問い合わせに番号を付け、答えは番号で持ち主へ返す（長い問い合わせが短いものを待たせない。Python は 16 本の糸で答える）。
@@ -560,3 +560,17 @@ TransferPitchAnalyzer の良い所（版ごとに並べて置く・起動でき�
 - 更新: Releases の `release.json` と配る ZIP を、BOX の `90_Releases\<アプリのフォルダ>\<版>\` に置く（§12.1）。各 PC が取り込み、開き直すと新しい版になる。
 - Python: TPA_PYTHON → exe の隣の python フォルダ（配る形）→ PATH → 標準の入れ場所 → py ランチャー → Microsoft Store の入口（`desktop/src/locate.rs`）。
 - 記録: この PC の作業場所の `logs/app.log`（`START mode=stdio`）と `logs/sidecar_stderr.log`。
+
+## Flask を外す（版 3.8.0）
+
+アプリ（画面と API）は Python の標準の部品だけで動く。受け口は `app/web.py`（道・問い合わせ・JSON・画面の型・静的ファイル・試験の口）で、
+Flask と同じ名前・同じ使い方にそろえたので、`app/routes/*` と試験は書き換えていない。窓口（`sidecar.py`）は Werkzeug で WSGI の
+問い合わせを組み立てるのをやめ、`App.handle(方法, 道, 問い合わせ, 見出し, 本文)` を直接呼ぶ。
+
+- 評価: 置き換える前に、Flask の版で全部の道・全部の静的ファイル・404／405・HEAD／OPTIONS・読めない本文など 69 件の答え
+  （状態・種類・キャッシュの見出し・中身）を記録し、置き換えた版（Flask 一式を読み込めなくして流した）と突き合わせた。
+  違いは、プログラムの指紋と一時フォルダの名前だけ（どちらも毎回変わる値）。決まりは `tests/test_web.py` に残した。
+- 同梱の Python（`desktop/bundle`）から Flask・Werkzeug・Jinja2・MarkupSafe・itsdangerous・click・blinker を外すのは、配る物を作る側で行う
+  （このリポジトリには無い）。外すまでのあいだ同梱に残っていても、アプリは読み込まないので動きは変わらない。
+- 開発で窓の外（ブラウザ）から見るときは `python -m app [ポート]`（app/__main__.py。この PC の中だけで待ち受ける）。
+

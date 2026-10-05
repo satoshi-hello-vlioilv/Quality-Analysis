@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """デスクトップ版の窓口（sidecar.py）: ポートを開かず、標準入出力の枠で問い合わせる。
 
-評価の物差しは「ブラウザ版（Flask へ直接）と同じ答えか」。本物の子プロセスを起こし、パイプで同じ問い合わせを送って
+評価の物差しは「アプリへ直接（test_client）と同じ答えか」。本物の子プロセスを起こし、パイプで同じ問い合わせを送って
 状態・種類・中身を比べる。あわせて、枠が混ざらないこと（同時に投げても id で正しく返る）・print が枠を壊さないこと・
 入力を閉じれば終わること（窓を閉じたら残らない）を確かめる。
 
@@ -90,11 +90,12 @@ class Sidecar:
 
 
 class Parity(unittest.TestCase):
-    """ブラウザ版（Flask へ直接）と、デスクトップ版の窓口（パイプ）で同じ答えが返るか。"""
+    """アプリへ直接（test_client）と、デスクトップ版の窓口（パイプ）で同じ答えが返るか。"""
 
     @classmethod
     def setUpClass(cls):
-        cls.tmp = tempfile.TemporaryDirectory()
+        # 片付けは、裏の糸（ref の一覧の問い合わせで動き出す品質データの写しの係）がまだ書いていても失敗にしない
+        cls.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         env = {**os.environ, "TRANSFER_LOCAL_ROOT": cls.tmp.name, "PYTHONIOENCODING": "utf-8"}
         cls.old_env = dict(os.environ)
         os.environ["TRANSFER_LOCAL_ROOT"] = cls.tmp.name
