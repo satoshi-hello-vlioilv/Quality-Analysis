@@ -32,6 +32,7 @@ sys.pycache_prefix = str(app_env.local_root() / "pycache")
 
 log = logging.getLogger("transfer-app")
 BASE_URL = "http://tpa.localhost/"     # Tauri（Windows の WebView2）が自前の仕組みに付ける名前と同じ
+PROTOCOL = 1                           # 枠の約束の版（desktop/src/sidecar.rs の PROTOCOL と同じ。枠の形を変えたら両方を1つ上げる）
 WORKERS = 16                           # 長い問い合わせ（見えない Edge で数十秒）の間も、ほかの問い合わせ・進み具合の確認に答える
 
 
@@ -123,7 +124,7 @@ def main() -> int:
         writer.send({"id": 0, "event": "fatal", "error": f"{type(e).__name__}: {e}"})
         return 1
     boot.start(app, "stdio", started)
-    writer.send({"id": 0, "event": "ready", "version": APP_VERSION, "build": app.config["BUILD"], "pid": os.getpid(),
+    writer.send({"id": 0, "event": "ready", "protocol": PROTOCOL, "version": APP_VERSION, "build": app.config["BUILD"], "pid": os.getpid(),
                  "python": sys.executable, "elapsed": round(time.perf_counter() - started, 3)})
     try:
         serve(app, rin, writer)

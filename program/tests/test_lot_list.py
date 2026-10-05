@@ -134,12 +134,17 @@ class PassiveMirrorTests(Base):
         self.assertEqual(p.read_path().parent, self.cache, "台帳の写しを読む")
         self.assertTrue(p.source_info()["mirrored"])
 
-    def test_external_only_on_desktop_with_rust(self):
+    def test_external_only_when_the_window_serves_it(self):
         from unittest import mock
         from app import mirror_is_external
-        with mock.patch.dict(os.environ, {"TPA_SHELL": "desktop"}):
-            self.assertTrue(mirror_is_external({}), "既定は rust")
+        with mock.patch.dict(os.environ, {"TPA_SHELL": "desktop", "TPA_SHELL_SERVES": "x, lotlist"}):
+            self.assertTrue(mirror_is_external({}), "窓が受け持つと名乗り、既定は rust")
             self.assertFalse(mirror_is_external({"desktop": {"lotlist_engine": "python"}}))
+        with mock.patch.dict(os.environ, {"TPA_SHELL": "desktop", "TPA_SHELL_SERVES": ""}):
+            self.assertFalse(mirror_is_external({}), "窓が受け持たない（Rust へ移す前の窓）なら自分で写す")
+        with mock.patch.dict(os.environ, {"TPA_SHELL_SERVES": "lotlist"}):
+            os.environ.pop("TPA_SHELL", None)
+            self.assertFalse(mirror_is_external({}), "窓の外では名乗りを見ない")
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("TPA_SHELL", None)
             self.assertFalse(mirror_is_external({}), "ブラウザ版は自分で写す")

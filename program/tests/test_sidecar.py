@@ -26,6 +26,12 @@ VOLATILE = {"server_time", "pid", "python", "elapsed", "at", "checkedAt", "ageHo
             "source"}
 
 
+def protocol_of(path: Path, pattern: str) -> int:
+    """枠の約束の版（ファイルに書いた数）を読む。"""
+    import re
+    return int(re.search(pattern, path.read_text(encoding="utf-8"), re.M).group(1))
+
+
 def stable(v):
     """比べるときに、時刻・プロセス番号のように毎回変わる値を除く。"""
     if isinstance(v, dict):
@@ -126,6 +132,7 @@ class Parity(unittest.TestCase):
     def test_ready_frame(self):
         head, _ = self.side.ready
         self.assertEqual(head["event"], "ready", head)
+        self.assertEqual(head["protocol"], protocol_of(ROOT / "sidecar.py", r"^PROTOCOL = (\d+)"), "枠の約束の版を名乗る（窓が違う版の中身を起こさない）")
         self.assertEqual(head["id"], 0)
         self.assertTrue(head["version"])
 
@@ -217,6 +224,14 @@ class Robust(unittest.TestCase):
         self.assertEqual(ev["res"][0]["status"], 500)
         self.assertEqual(side.ask("GET", "/api/health")[0], 200)
         side.close()
+
+
+@unittest.skipUnless((ROOT.parent / "desktop" / "src" / "sidecar.rs").exists(), "desktop フォルダが無い（配った形）")
+class SameProtocol(unittest.TestCase):
+    def test_window_and_sidecar_agree(self):
+        """窓（Rust）と窓口（Python）の枠の約束の版が同じ（違うと窓は中身を起こさない）。"""
+        rust = protocol_of(ROOT.parent / "desktop" / "src" / "sidecar.rs", r"^pub const PROTOCOL: u64 = (\d+);")
+        self.assertEqual(rust, protocol_of(ROOT / "sidecar.py", r"^PROTOCOL = (\d+)"))
 
 
 if __name__ == "__main__":

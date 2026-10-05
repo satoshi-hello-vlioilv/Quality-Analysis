@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>起動中</title>
+<!--
+  デスクトップ版の起動画面（exe に入る）。窓（Rust・src/main.rs）が確かめた事実だけで進み具合を言う:
+  ① アプリの中身を探す ② Python を探す ③ アプリの中身を起こす ④ 画面を開く。
+  窓が splash.brand(name, subtitle)（名前は program/app/brand.json の1か所）/ splash.step(id, state, detail) / splash.fail(title, detail) を呼ぶ。
+  形は 5 案＋複合案を 1728×1152 で進行中・失敗の 2 状態を描いて比べて選んだ（左にアプリの名前・右に段取り。地は画面の見出しと同じ藍）。
+  icon.png は作るとき build.rs が program/app/app_icon.py で描く。
+-->
+<style>
+ :root{
+  --navy:#1c3550; --blue:#2b5f79; --teal:#2f7d78; --amber:#e6a52e;
+  --ink:#1b2733; --muted:#5d6b77; --faint:#8995a0; --line:#dbe3e9;
+  --warn:#8a5a00; --warn-bg:#fff1d6;
+  --red:#c0392b; --red-bg:#fdeeec; --red-line:#e6bcb6;
+ }
+ *{box-sizing:border-box}
+ html,body{height:100%;margin:0}
+ body{display:grid;place-items:center;background:linear-gradient(150deg,#13263a,var(--navy) 45%,var(--blue));
+  font-family:"Yu Gothic UI","Segoe UI",Meiryo,system-ui,sans-serif;font-size:15px;line-height:1.6;color:var(--ink)}
+ .card{width:min(980px,94vw);display:grid;grid-template-columns:320px 1fr;background:#fff;border-radius:16px;overflow:hidden;
+  box-shadow:0 18px 44px rgba(0,0,0,.3)}
+ .side{display:flex;flex-direction:column;padding:32px 26px;color:#fff;background:linear-gradient(160deg,var(--navy),var(--blue))}
+ .side img{width:80px;height:80px}
+ .side h1{font-size:22px;margin:14px 0 0;letter-spacing:.02em}
+ .side .sub{opacity:.8}
+ .side .el{margin-top:auto;padding-top:24px;font:12px Consolas,monospace;opacity:.7}
+ .main{padding:22px 26px}
+ #title{display:block;font-size:19px}
+ #lead{display:block;color:var(--muted);font-size:13px}
+ ol{list-style:none;margin:10px 0;padding:0}
+ li{display:flex;gap:12px;padding:9px 0;border-top:1px solid var(--line)}
+ li:first-child{border-top:0}
+ .mark{flex:0 0 auto;width:20px;height:20px;margin-top:2px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;
+  font-size:11px;font-weight:800;color:#fff}
+ .t{display:block;font-weight:700}
+ .d{display:block;color:var(--muted);font-size:12.5px;word-break:break-all}
+ li.wait{color:var(--faint)}
+ li.now .mark{border-color:var(--teal);border-top-color:transparent;animation:spin .9s linear infinite}
+ li.ok .mark{background:var(--teal);border-color:var(--teal)}
+ li.ok .mark::after{content:"✓"}
+ li.warn .mark{background:var(--amber);border-color:var(--amber);color:var(--warn)}
+ li.warn .mark::after{content:"!"}
+ li.bad .mark{background:var(--red);border-color:var(--red)}
+ li.bad .mark::after{content:"×"}
+ li.bad .t{color:var(--red)}
+ @keyframes spin{to{transform:rotate(360deg)}}
+ @media (prefers-reduced-motion:reduce){li.now .mark{animation:none}}
+ .fail{padding:12px 14px;border-radius:10px;background:var(--red-bg);border:1px solid var(--red-line);color:var(--red);font-size:13px;line-height:1.7}
+ .fail pre{white-space:pre-wrap;margin:6px 0 0;font:12px Consolas,monospace;max-height:220px;overflow:auto;color:var(--ink)}
+ .hidden{display:none}
+</style>
+</head>
+<body>
+<section class="card" aria-labelledby="title">
+  <div class="side">
+    <img src="icon.png" alt="">
+    <h1 id="name"></h1>
+    <div class="sub" id="subtitle"></div>
+    <span class="el" id="elapsed">0.0 秒</span>
+  </div>
+  <div class="main">
+    <b id="title">起動しています</b>
+    <span id="lead">準備ができたら、この窓がそのままアプリに切り替わります。</span>
+    <ol>
+      <li class="now" id="s-program"><span class="mark"></span><span><span class="t">アプリの中身を探す</span><span class="d">exe と並ぶ program フォルダ</span></span></li>
+      <li class="wait" id="s-python"><span class="mark"></span><span><span class="t">Python を探す</span><span class="d">配られた形に同梱の Python</span></span></li>
+      <li class="wait" id="s-backend"><span class="mark"></span><span><span class="t">アプリの中身を起こす</span><span class="d">計算・LotDsp・マスタ（ポートは使いません）</span></span></li>
+      <li class="wait" id="s-open"><span class="mark"></span><span><span class="t">画面を開く</span><span class="d"></span></span></li>
+    </ol>
+    <div class="fail hidden" id="fail" role="alert"></div>
+  </div>
+</section>
+<script>
+(() => {
+  const t0 = performance.now();
+  const $ = (s) => document.querySelector(s);
+  const sec = () => ((performance.now() - t0) / 1000).toFixed(1);
+  const timer = setInterval(() => { $("#elapsed").textContent = sec() + " 秒"; }, 100);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  /* よくある理由 → 次にすること（理由の文から見分ける。当てはまらなければ理由だけ出す） */
+  const HINTS = [
+    [/program フォルダ|sidecar\.py/, "配られた ZIP を展開したフォルダの exe から開いてください（exe と program フォルダが並んでいる形）。"],
+    [/Python が見つかりません/, "配られた ZIP に入っている python フォルダが exe の隣にあるか確かめてください。無ければ ZIP を展開し直してください。"],
+    [/No module named/, "同梱の Python の部品が欠けています。配られた ZIP を展開し直してから開いてください。"],
+    [/版が食い違/, "窓とアプリの中身の組がずれています。配られた ZIP を展開し直してから開いてください。"],
+    [/秒たっても準備できません/, "PC が混んでいるか、共有フォルダへの接続で止まっています。少し待ってから開き直してください。"],
+  ];
+  window.splash = {
+    brand(name, subtitle) {
+      $("#name").textContent = name;
+      $("#subtitle").textContent = subtitle;
+      document.title = name + " — 起動中";
+    },
+    step(id, state, detail) {
+      const li = $("#s-" + id); if (!li) return;
+      li.className = state;
+      if (detail) li.querySelector(".d").textContent = detail;
+      const next = li.nextElementSibling;
+      if (state === "ok" && next && next.classList.contains("wait")) next.className = "now";
+    },
+    fail(title, detail) {
+      clearInterval(timer);
+      $("#elapsed").textContent = sec() + " 秒";
+      $("#title").textContent = title;
+      $("#lead").textContent = "下の理由を確かめてください。直したら、この窓を閉じて開き直してください。";
+      document.querySelectorAll("li.now").forEach((li) => (li.className = "bad"));
+      const hint = HINTS.find(([re]) => re.test(detail));
+      const box = $("#fail");
+      box.innerHTML = (hint ? "<b>次にすること</b><div>" + hint[1] + "</div>" : "") + "<b>理由</b><pre>" + esc(detail) + "</pre>";
+      box.classList.remove("hidden");
+    },
+  };
+})();
+</script>
+</body>
+</html>

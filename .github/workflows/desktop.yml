@@ -1,0 +1,78 @@
+# デスクトップ版（desktop/・Tauri）を Windows で本番の作り方（--release）で作り、本物の WebView2 で自己診断する。
+# 通った exe と自己診断の結果を Artifacts に置く（配る ZIP にするのは、更新・配布の係を移したあと）。
+name: desktop
+
+on:
+  pull_request:
+    paths: ["desktop/**", "program/**", ".github/workflows/desktop.yml"]
+  push:
+    branches: [main]
+    paths: ["desktop/**", "program/**", ".github/workflows/desktop.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      PYTHONIOENCODING: utf-8
+      TPA_PYTHON: python
+      # exe が名乗る「作ったコミット」（/__desktop/info の commit）
+      TPA_BUILD_COMMIT: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop
+      - name: test（Rust・Windows）
+        working-directory: desktop
+        run: cargo test --locked
+      - name: exe を作る
+        working-directory: desktop
+        run: cargo build --release --locked
+      # exe の名前は program/app/brand.json の1か所（ここには書かない）
+      - name: exe の名前
+        run: '"EXE=" + (Get-Content program/app/brand.json -Raw -Encoding utf8 | ConvertFrom-Json).exe | Out-File -Append -Encoding utf8 $env:GITHUB_ENV'
+      # 異常ロット一覧を Rust と Python で引き比べるため、試験用の品質データ（3000 行）を参照先にした設定で起こす
+      - name: 自己診断（本物の WebView2・ポートなし）
+        run: |
+          python program\tests\lotlist_fixture.py "$env:RUNNER_TEMP\q.sqlite3" 3000
+          python program\tests\selftest_config.py "$env:RUNNER_TEMP\q.sqlite3" "$env:RUNNER_TEMP\appsettings.json"
+          $env:TRANSFER_APP_CONFIG = "$env:RUNNER_TEMP\appsettings.json"
+          $env:TRANSFER_LOCAL_ROOT = "$env:RUNNER_TEMP\root"
+          $env:TPA_SELFTEST = "$env:RUNNER_TEMP\selftest.json"
+          Start-Process -FilePath "desktop\target\release\$env:EXE" -WorkingDirectory $env:RUNNER_TEMP
+          $deadline = (Get-Date).AddSeconds(240)
+          while (-not (Test-Path $env:TPA_SELFTEST) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
+          Wait-Process -Name ([IO.Path]::GetFileNameWithoutExtension($env:EXE)) -Timeout 30 -ErrorAction SilentlyContinue
+          Get-ChildItem "$env:TRANSFER_LOCAL_ROOT\logs" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "--- $($_.Name)"; Get-Content $_.FullName -Tail 25 -Encoding utf8 }
+          if (-not (Test-Path $env:TPA_SELFTEST)) { Write-Host "結果のファイルがありません"; exit 2 }
+          $r = Get-Content $env:TPA_SELFTEST -Raw -Encoding utf8 | ConvertFrom-Json
+          $r.results | ForEach-Object { Write-Host ("{0}: {1} -- {2}" -f ($(if ($_.ok) { "PASS" } else { "FAIL" })), $_.name, $_.info) }
+          if ($r.error) { Write-Host "ERROR: $($r.error)" }
+          Start-Sleep -Seconds 3
+          if (Get-Process python -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*hostedtoolcache*" }) { Write-Host "Python が残っています（窓を閉じても中身が終わっていない）"; exit 4 }
+          if (-not $r.ok) { exit 1 }
+      - name: 成果物をまとめる
+        if: always()
+        run: |
+          $out = "$env:RUNNER_TEMP\out"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          if (Test-Path "desktop\target\release\$env:EXE") { Copy-Item "desktop\target\release\$env:EXE" $out }
+          if (Test-Path "$env:RUNNER_TEMP\selftest.json") { Copy-Item "$env:RUNNER_TEMP\selftest.json" $out }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-windows
+          path: ${{ runner.temp }}/out/
+          if-no-files-found: warn

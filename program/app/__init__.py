@@ -32,10 +32,18 @@ def lot_engine(settings):
     return (settings.get("desktop") or {}).get("lotlist_engine", "rust")
 
 
+def shell_serves():
+    """窓（デスクトップ版の Rust）が受け持つと名乗ったこと（環境変数 TPA_SHELL_SERVES・desktop/src/sidecar.rs の SERVES）。
+    名乗っていないことはこのプロセスが受け持つ（受け持ちを移す途中の窓と組んでも欠けない）。"""
+    if os.environ.get("TPA_SHELL") != "desktop":
+        return frozenset()
+    return frozenset(s.strip() for s in os.environ.get("TPA_SHELL_SERVES", "").split(",") if s.strip())
+
+
 def mirror_is_external(settings):
-    """品質データの写しを、このプロセスの外（デスクトップ版の Rust・desktop/src/mirror.rs）が作るか。
-    そのときこのプロセスは写さず、同じ台帳を読むだけにする（同じ PC で写しの係を2つ動かさない）。"""
-    return os.environ.get("TPA_SHELL") == "desktop" and lot_engine(settings) == "rust"
+    """品質データの写しを、このプロセスの外（デスクトップ版の Rust）が作るか。窓が異常ロット一覧（lotlist）を受け持つと名乗り、
+    設定も rust のときだけ。そのときこのプロセスは写さず、同じ台帳を読むだけにする（同じ PC で写しの係を2つ動かさない）。"""
+    return "lotlist" in shell_serves() and lot_engine(settings) == "rust"
 
 
 def make_lot_mirror(params, passive=False):
