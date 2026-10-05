@@ -221,3 +221,14 @@ WaveLog の品質データと同じ SQLite（既定 `\\Nlmsrvngy03\Read\【New�
 ## 以前のブラウザ版について（版 3.0.0 で外した）
 
 以前は `Start.vbs` が Python を探してサーバー（127.0.0.1 のポート）を起こし、Edge で開くブラウザ版がありました。ポートが起こす不具合（プロキシ・ポートの取り合い・古いサーバーの居残り）と、二重の手入れを無くすため、デスクトップ版に一本化しました。VPN でログインが要るとき Edge 拡張 LotData-Link が読んでいた道は、LotDsp の窓（ログインは利用者・続きはアプリ）に置き換わっています。隣の exe を開くだけになっていた `Start.vbs` も、版 3.1.0 で外しました（入口は exe だけ。新しい版へは exe が引き継ぎます）。
+
+## 窓（desktop/）を作る・確かめる（開発する人へ）
+
+版 3.9.0 から、窓（Rust・Tauri）の元をこのリポジトリの `desktop/` に置いています（WaveLog の窓を元に作り直しました）。
+いま `desktop/` が受け持つのは、窓・起動画面・1つだけ起動・静的ファイル・中身（Python）の監督と起こし直し・外のリンク・終了です。
+異常ロット一覧の問い合わせと写し、更新・配布・この PC へ写す・ショートカットは、順に `desktop/` へ移します（移すまでは、異常ロット一覧は Python が受け持ちます。
+窓は受け持つ仕事を起動のときに中身へ伝え、中身は伝えられなかった仕事を自分で受け持ちます）。
+
+- 作る: `cd desktop && cargo build`（Linux は `libwebkit2gtk-4.1-dev` などが要ります。`.github/workflows/ci.yml` を参照）。exe は上へたどって `program/sidecar.py` を探します。
+- 自己診断: `TPA_SELFTEST=<結果のファイル> desktop/target/debug/Defect-Analyzer` で起こすと、本物の窓の中で 23 項目を確かめて結果を書き、終わります（CI が Linux と Windows で毎回流します）。
+- アイコンは `program/app/app_icon.py` が描きます（作るたびに `desktop/build.rs` が書き出します）。
