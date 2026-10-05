@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Flask アプリケーションファクトリ。"""
+"""アプリを作る（受け口は app/web.py。版 3.8.0 で Flask から置き換えた）。"""
 import os
 from pathlib import Path
 
-from flask import Flask
-
 import app_build
 import app_env
+
+from .web import App
 
 
 def effective_settings(app):
@@ -47,7 +47,7 @@ def make_lot_mirror(params, passive=False):
 
 
 def create_app(test_config=None):
-    app = Flask(__name__)
+    app = App(__name__)
     base = Path(__file__).resolve().parents[1]
     app.config["APP_SETTINGS"] = app_env.load_settings(base)
     app.config["BASE_DIR"] = base

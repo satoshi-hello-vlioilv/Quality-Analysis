@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """ロット一覧（品質データ SQLite の写し）。"""
-from flask import current_app, jsonify, request
+from ..web import current_app, jsonify, request
 
 from .. import effective_settings, lot_engine, lot_list_params
 from ..services import lot_list

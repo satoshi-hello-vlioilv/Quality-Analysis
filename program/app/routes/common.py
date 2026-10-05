@@ -2,7 +2,7 @@
 """ルートが共通で使う部品（Blueprint・マスタの窓口・失敗の返し方・この PC の名乗りと権限）。"""
 import time
 
-from flask import Blueprint, current_app, jsonify, request
+from ..web import Blueprint, current_app, jsonify, request
 
 import app_env
 

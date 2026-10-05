@@ -201,7 +201,7 @@ class Presence(Env):
         self.assertEqual(fl["latest"], "9.9.9"); self.assertTrue(next(x for x in fl["items"] if x["login"] == "u1")["outdated"])
 
     def test_heartbeat_tells_outdated_through_the_background_thread(self):
-        """心拍 → 裏の糸で最新版を数え直す → 次の心拍の答えに「古い」（裏の糸で Flask の current_app を使わない）。"""
+        """心拍 → 裏の糸で最新版を数え直す → 次の心拍の答えに「古い」（裏の糸で current_app を使わない）。"""
         self.write_history("u9", "PC-9", "9.9.9")
         with mock.patch.object(presence, "WRITE_INTERVAL_SEC", 0), mock.patch.object(presence, "NEWEST_INTERVAL_SEC", 0):
             presence._state.update(newest=None, newest_at=0.0)

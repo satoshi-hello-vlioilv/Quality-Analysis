@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """画面・版・画面の設定・心拍（利用状況）。"""
-from flask import current_app, jsonify, render_template, request
+from ..web import current_app, jsonify, render_template, request
 
 from .. import effective_settings
 from ..brand import BRAND
@@ -77,7 +77,7 @@ def heartbeat():
 def _presence_beat():
     try:
         m = me()
-        # 最新版の数え直しは裏の糸で走る（Flask の current_app は使えない）。権限の行はここで読み終えたものを渡す
+        # 最新版の数え直しは裏の糸で走る（current_app は問い合わせの中でだけ使える）。権限の行はここで読み終えたものを渡す
         presence.touch_async(m["login"], m["pc"], m["flags"]["role"], roles_from(m["rows"]))
         return {"version": presence.version_notice(m["flags"]["role"]), "revoked": m["revoked"]}
     except Exception:

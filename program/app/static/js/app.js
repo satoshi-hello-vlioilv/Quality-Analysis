@@ -283,7 +283,7 @@ async function pollUpdate() {
   clearTimeout(updTimer);
   try {
     const r = await fetch("/__desktop/update", { cache: "no-store" });
-    if (!r.ok) return;                       // 窓の外（開発の Flask だけ）では更新の係が無い
+    if (!r.ok) return;                       // 窓の外（開発で python -m app から見るとき）では更新の係が無い
     state.update = await r.json();
   } catch (_) { return; }
   paintVersionNotice();
@@ -367,7 +367,7 @@ const desktopPost = async (url) => {   // 窓（/__desktop/*）へ POST し、�
 async function loadInstall() {
   try {
     const r = await fetch("/__desktop/install", { cache: "no-store" });
-    if (!r.ok) return;                       // 窓の外（開発の Flask だけ）
+    if (!r.ok) return;                       // 窓の外（開発で python -m app から見るとき）
     state.install = await r.json();
   } catch (_) { return; }
   const sc = state.install.shortcut || {};

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """参照先マスタ（読みに行く場所: LotDsp の URL・ロット一覧の元ファイルなど）。"""
-from flask import current_app, jsonify, request
+from ..web import current_app, jsonify, request
 
 import app_env
 

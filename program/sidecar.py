@@ -13,7 +13,7 @@
   答え       {"id", "status", "headers": [[名前, 値], ...], "len"}
   知らせ     {"id": 0, "event": "ready" | "fatal", ...}（id 0 は問い合わせに使わない）
 
-アプリ本体（Flask）はそのまま WSGI として呼ぶ（試験は Flask の test_client で同じルートを呼ぶ）。
+アプリ本体（app/web.py の App）へ、問い合わせをそのまま渡す（App.handle。試験は test_client で同じ道を呼ぶ）。
 """
 from __future__ import annotations
 
@@ -66,19 +66,12 @@ class Writer:
 # ---------------- 1つの問い合わせをアプリへ渡す ----------------
 def handle(app, head: dict, body: bytes):
     """問い合わせのヘッダー・本文 → (答えのヘッダー, 本文)。アプリの中で何が起きても答えは返す。"""
-    from werkzeug.test import EnvironBuilder, run_wsgi_app
     rid = head.get("id")
     try:
-        env = EnvironBuilder(path=head.get("path") or "/", base_url=BASE_URL, query_string=head.get("query") or "",
-                             method=(head.get("method") or "GET").upper(), headers=list((head.get("headers") or {}).items()),
-                             data=body).get_environ()
-        app_iter, status, headers = run_wsgi_app(app, env, buffered=True)
-        try:
-            out = b"".join(app_iter)
-        finally:
-            getattr(app_iter, "close", lambda: None)()
-        return {"id": rid, "status": int(str(status).split()[0]),
-                "headers": [[k, v] for k, v in headers.items() if k.lower() != "content-length"]}, out
+        r = app.handle((head.get("method") or "GET"), head.get("path") or "/", head.get("query") or "",
+                       head.get("headers") or {}, body)
+        return {"id": rid, "status": r.status_code,
+                "headers": [[k, v] for k, v in r.headers.items() if k.lower() != "content-length"]}, r.data
     except Exception as e:             # ここまで来るのはアプリの外の失敗（枠の中身がおかしい等）
         log.exception("SIDECAR request failed path=%s", head.get("path"))
         msg = json.dumps({"error": f"問い合わせを処理できませんでした: {e}", "type": type(e).__name__}, ensure_ascii=False).encode("utf-8")
@@ -124,16 +117,16 @@ def main() -> int:
     try:
         from app import create_app
         from app.version import APP_VERSION
-        flask_app = create_app()
+        app = create_app()
     except Exception as e:             # 起動できない理由を窓（Rust）へ伝える
         log.exception("SIDECAR fatal")
         writer.send({"id": 0, "event": "fatal", "error": f"{type(e).__name__}: {e}"})
         return 1
-    boot.start(flask_app, "stdio", started)
-    writer.send({"id": 0, "event": "ready", "version": APP_VERSION, "build": flask_app.config["BUILD"], "pid": os.getpid(),
+    boot.start(app, "stdio", started)
+    writer.send({"id": 0, "event": "ready", "version": APP_VERSION, "build": app.config["BUILD"], "pid": os.getpid(),
                  "python": sys.executable, "elapsed": round(time.perf_counter() - started, 3)})
     try:
-        serve(flask_app, rin, writer)
+        serve(app, rin, writer)
     finally:
         log.info("SIDECAR input closed. stopping")
         boot.stop()
