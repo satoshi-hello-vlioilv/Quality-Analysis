@@ -1,0 +1,262 @@
+/* =========================================================================
+   マスタ管理(設備マスタ / ロールマスタ) UI
+   - 別画面遷移ではなくオーバーレイで開閉し、SPA としての一体感を保つ。
+   - 一覧は代表列のみ表示し、詳細はフォームへ委ねる(認知負荷を抑える段階的開示)。
+   - 配色は解析画面の配色トークン(:root)を継承し、意味を統一する:
+     藍=既定/操作、アンバー=編集可能・強調アクション、赤=削除・警告。
+   ========================================================================= */
+.master-overlay{position:fixed;inset:0;background:rgba(15,30,45,.55);
+  display:flex;align-items:center;justify-content:center;z-index:50;padding:24px}
+/* 窓の台紙（マスタ管理・フォーム・確認・更新履歴・取込ダイアログで同じ）。大きさだけを種類ごとに決める */
+.master-panel,.master-form-card{background:var(--surface);border-radius:12px;
+  display:flex;flex-direction:column;box-shadow:var(--shadow);overflow:hidden}
+.master-panel{width:min(1240px,96vw);height:min(920px,92vh)}
+
+.master-head{padding:10px 14px 10px 20px;display:flex;justify-content:space-between;align-items:center;gap:12px;
+  color:var(--on-fill);flex:0 0 auto}
+.master-title{display:flex;align-items:center;gap:16px;min-width:0;flex-wrap:wrap}
+.master-head h2{margin:0;font-size:17px;white-space:nowrap}
+.master-head .master-place{margin-top:0}
+.icon-btn{width:28px;height:28px;border-radius:50%;border:1px solid rgba(255,255,255,.5);
+  background:var(--on-dark-fill);color:var(--on-fill);font-size:17px;cursor:pointer;line-height:1;
+  display:grid;place-items:center;flex:0 0 auto}
+.icon-btn:hover{background:rgba(255,255,255,.22)}
+
+/* タブ: 下線式（選んでいるタブだけ藍の下線と濃い字）。件数は小さな丸札 */
+.master-tabs{display:flex;gap:2px;padding:0 14px;background:var(--surface);border-bottom:1px solid var(--line);flex:0 0 auto}
+.master-tabs .tab{border:0;border-bottom:3px solid transparent;background:none;color:var(--muted);
+  padding:11px 14px 9px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:7px}
+.master-tabs .tab:hover{color:var(--ink);background:var(--surface-2)}
+.master-tabs .tab.active{color:var(--h-input);border-bottom-color:var(--h-input)}
+.master-tabs .tab .tab-count{min-width:20px;height:18px;padding:0 6px;border-radius:9px;background:var(--plain-soft);color:var(--plain-ink);
+  font-size:11.5px;font-weight:700;display:inline-grid;place-items:center;font-variant-numeric:tabular-nums}
+.master-tabs .tab.active .tab-count{background:var(--input-soft);color:var(--h-input)}
+
+.master-toolbar{display:flex;align-items:center;gap:10px;padding:10px 18px;border-bottom:1px solid var(--line);
+  background:var(--surface);flex:0 0 auto}
+#masterSearch{flex:0 1 340px;min-width:180px;height:32px;border:1px solid var(--line);background:#f8fafc
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238193a4' stroke-width='2.2'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat 10px 50%;
+  border-radius:8px;padding:0 10px 0 32px;font-size:14px;font-family:inherit}
+#masterSearch:focus{outline:2px solid var(--edit-focus);border-color:var(--edit-focus)}
+.master-count{font-size:13px;color:var(--muted)}
+.btn-primary,.btn-danger{height:30px;border:0;border-radius:7px;padding:0 14px;
+  font-weight:700;cursor:pointer;font-size:14px;font-family:inherit}
+.btn-primary{background:var(--accent);color:var(--accent-ink)}
+.btn-primary:hover{background:#d69720}
+.btn-danger{background:var(--danger);color:var(--on-fill)}
+.btn-danger:hover{background:#a52f21}
+
+.master-table-wrap{flex:1;min-height:0;overflow:auto;position:relative}
+/* 一覧: 列は中身の幅（th の width）、余りは grow の列が受ける。見出しは淡く、行は押せば編集 */
+table.master-table{width:100%;border-collapse:separate;border-spacing:0;font-size:14px;table-layout:fixed}
+table.master-table th,table.master-table td{padding:0 14px;height:42px;border-bottom:1px solid var(--line-soft);
+  text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+table.master-table thead th{position:sticky;top:0;height:34px;background:var(--surface-4);color:#4b5f72;font-weight:700;
+  font-size:12.5px;z-index:2;border-bottom:1px solid var(--line)}
+table.master-table thead th small{margin-left:4px;font-weight:600;color:#8193a4}
+table.master-table th.num,table.master-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+table.master-table th.actions,table.master-table td.actions{width:92px;text-align:right;overflow:visible}
+table.master-table tbody tr{cursor:pointer;outline:none}
+table.master-table tbody tr:hover td{background:#f3f8fb}
+table.master-table tbody tr:focus-visible td{background:#eaf2f9;box-shadow:inset 0 0 0 0 transparent}
+table.master-table tbody tr:focus-visible td:first-child{box-shadow:inset 3px 0 0 var(--h-input)}
+.m-name{color:var(--ink);font-weight:700;letter-spacing:.02em}
+.m-chip{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:11px;font-size:12.5px;font-weight:700}
+/* 札の色は意味ごとに1つ（青＝上・部分・…／青緑＝下・メンテ／緑＝有・有効・編集可／灰／アンバー／赤／紫） */
+.m-chip.c-up,.m-chip.c-part{background:var(--info-soft);color:var(--info-ink)}
+.m-chip.c-down,.m-chip.c-maint{background:#e2f2ef;color:#1f6b60}
+.m-chip.c-line,.m-chip.c-plain{background:#f1f3f6;color:#44576a}
+.m-chip.c-line{font-variant-east-asian:normal}
+.m-chip.c-meter,.m-chip.c-full,.m-chip.c-on{background:var(--ok-soft);color:var(--ok-ink)}
+.m-chip.c-user,.m-chip.c-view{background:var(--plain-soft);color:#44576a}
+.m-chip.c-dev{background:#efe8ff;color:#5b3fb0}
+.m-chip.c-op{background:var(--amber-soft);color:var(--warn-ink)}
+.m-chip.c-off{background:var(--danger-bg);color:#a33a2c}
+.m-chip.c-warn{background:var(--warn-soft);color:var(--warn-ink)}
+.m-none{color:#b4c0cb}
+.m-unset{color:var(--warn-ink);background:var(--amber-soft);border-radius:4px;padding:1px 6px;font-size:12px;font-weight:700}
+.m-code{font-family:Consolas,"Yu Gothic UI",monospace;font-size:12.5px;background:#f4f6f9;border:1px solid #e3e8ee;border-radius:4px;padding:1px 6px;color:#34495e}
+/* 行の操作: 目立たない印。行に乗せる・選ぶと見える。削除は乗せたときだけ赤 */
+.row-btn{width:30px;height:28px;border:1px solid transparent;background:none;color:#8193a4;border-radius:6px;
+  cursor:pointer;margin-left:2px;opacity:.55;transition:opacity .12s;display:inline-grid;place-items:center;padding:0;vertical-align:middle}
+tr:hover .row-btn,tr:focus-within .row-btn,tr:focus-visible .row-btn{opacity:1}
+.row-btn:hover{background:var(--surface-5);border-color:var(--line);color:var(--h-input)}
+.row-btn.danger:hover{background:var(--danger-bg);border-color:var(--danger-line);color:var(--danger)}
+
+.master-empty{padding:48px 20px;text-align:center;color:var(--muted);font-size:14.5px}
+
+/* ---------- 追加・編集フォーム ---------- */
+.master-form-overlay{position:fixed;inset:0;background:rgba(15,30,45,.6);display:flex;align-items:center;
+  justify-content:center;z-index:70;padding:20px}
+.master-form-card{width:min(560px,94vw);max-height:88vh}
+.master-form-card.small{width:min(420px,92vw)}
+.master-form-head{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;
+  justify-content:space-between;align-items:center;flex:0 0 auto}
+.master-form-head h3{margin:0;font-size:16px}
+.master-form-head .icon-btn{border-color:var(--line);color:var(--muted);background:var(--surface-3)}
+.master-form-head .icon-btn:hover{background:#eaeef1}
+.master-form-body{padding:16px 18px;overflow:auto;display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
+.master-form-body p{margin:0;grid-column:1/-1;font-size:14.5px;line-height:1.6;color:var(--muted)}
+.f-field{display:flex;flex-direction:column;gap:4px}
+.f-field.full{grid-column:1/-1}
+.f-field label{font-size:12.5px;color:var(--muted);font-weight:600}
+.f-field label .req{color:var(--danger);margin-left:2px}
+.f-field input,.f-field select,.f-field textarea{border:1px solid var(--edit-line);background:#fffdf7;
+  border-radius:6px;padding:6px 8px;font-size:14.5px;font-family:inherit;color:var(--ink)}
+.f-field input:focus,.f-field select:focus,.f-field textarea:focus{outline:2px solid var(--edit-focus);
+  border-color:var(--edit-focus)}
+.f-field textarea{resize:vertical;min-height:52px}
+.master-form-foot{display:flex;align-items:center;gap:8px;padding:12px 18px;border-top:1px solid var(--line);
+  background:#f8fafb;flex:0 0 auto}
+.form-error{color:var(--danger);font-size:13px;font-weight:700}
+
+@media(max-width:640px){
+  .master-form-body{grid-template-columns:1fr}
+}
+
+/* ---------- 置き場の帯（手元のみ／共有／共有に届かない）----------
+   見出しの帯の中で、状態は「印の色＋言葉」の1組で言う（色だけに頼らない）。
+   共有=青緑（ふつう）・手元のみ=灰（ふつう）・届かない=アンバー（設定・確認が要る）。 */
+.master-place{margin-top:8px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:12.5px}
+.master-place .place-tag{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;border-radius:999px;
+  font-weight:700;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.1)}
+.master-place .place-tag::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+.master-place .place-tag.shared{color:#9fe3dc}
+.master-place .place-tag.local{color:#d5dde4}
+.master-place .place-tag.off{color:#ffd58a;border-color:#ffd58a}
+.master-place .place-dir{font-family:Consolas,"Yu Gothic UI",monospace;opacity:.9;word-break:break-all}
+.master-place .place-meta{opacity:.85}
+.master-place .place-news{color:#ffe7ae;font-weight:700}
+.master-place .place-btn{height:24px;padding:0 10px;border-radius:6px;border:1px solid var(--on-dark-line);
+  background:var(--on-dark-fill);color:var(--on-fill);font:inherit;font-weight:700;cursor:pointer}
+.master-place .place-btn:hover{background:var(--on-dark-hover)}
+#masterAddBtn:disabled,.row-btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* ---------- 保存の途中経過・競合 ----------
+   待ち=藍の淡い面（そのうち通る）／競合=アンバー（人が選ぶ）。相手の値と自分の値を並べて見比べる。 */
+.master-notice{margin:12px 18px 0;padding:10px 12px;border-radius:8px;font-size:13.5px;line-height:1.6;flex:0 0 auto}
+.master-notice.wait{background:#eaf1f8;border:1px solid #bcd0e4;color:#23415f}
+.master-notice.conflict{background:#fff6e2;border:1px solid #efcf85;color:#4a3700}
+.master-notice b{font-weight:800}
+.master-notice table{border-collapse:collapse;margin:8px 0 2px;width:100%;font-size:13px}
+.master-notice th,.master-notice td{padding:4px 8px;border-bottom:1px solid rgba(0,0,0,.08);text-align:left;vertical-align:top}
+.master-notice thead th{font-size:12px;color:#6a5a2a}
+.master-notice td.theirs{color:#1f5e3a;font-weight:700}
+.master-notice .acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.master-notice .acts button{height:30px;padding:0 12px;border-radius:7px;font:inherit;font-weight:700;cursor:pointer;
+  border:1px solid #c9a24a;background:var(--surface);color:#4a3700}
+.master-notice .acts button.primary{background:var(--h-input);border-color:var(--h-input);color:var(--on-fill)}
+
+/* 欄の書き方の説明（同一工程の名前など） */
+.f-hint{display:block;margin-top:4px;font-size:12px;color:var(--muted);line-height:1.5}
+
+/* ---------- 参照先（読みに行く場所）のカード ----------
+   1項目＝1枚。いまの値（入力）・既定（薄い字）・確かめた結果を近くに置く（近接）。
+   マスタで変えた項目は藍の縁、既定のままは灰の札（変えたかどうかを色だけにせず札の字でも言う）。 */
+.master-settings{flex:1;min-height:0;overflow:auto;padding:14px 18px 18px;background:var(--surface-2)}
+.ps-lead{margin:0 0 10px;font-size:13.5px;color:var(--ro-ink)}
+.ps-loading{color:var(--muted)}
+.ps-notice{margin:0 0 10px;padding:8px 12px;border-radius:8px;background:var(--amber-pale);border:1px solid var(--amber-line);color:var(--amber-ink);font-size:13px}
+.ps-card{background:var(--surface);border:1px solid var(--line);border-left:4px solid #c9d3db;border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.ps-card.is-changed{border-left-color:var(--h-input)}
+.ps-card.is-readonly{background:var(--surface-1)}
+.ps-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ps-head b{font-size:14.5px}
+.ps-badge{font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:999px}
+.ps-badge.default{background:var(--surface-5);color:var(--muted)}
+.ps-badge.changed{background:#e3ecf7;color:#2c4d78}
+.ps-hint{margin:4px 0 8px;font-size:12.5px;color:var(--muted);line-height:1.6}
+.ps-hint code,.ps-now code{font-family:Consolas,"BIZ UDGothic",monospace;font-size:12.5px;background:var(--surface-4);padding:1px 5px;border-radius:4px;word-break:break-all}
+.ps-row{display:flex;gap:8px;align-items:center}
+.ps-input{flex:1;min-width:0;height:32px;border:1px solid var(--edit-line);background:var(--edit-field);border-radius:7px;padding:0 10px;
+  font-family:Consolas,"BIZ UDGothic",monospace;font-size:13.5px;color:var(--ink)}
+.ps-input:focus{outline:none;border-color:var(--edit-focus);box-shadow:0 0 0 3px var(--focus-ring)}
+.ps-input::placeholder{color:#9aa6b0;font-family:inherit}
+.ps-row button{height:32px;white-space:nowrap}
+.ps-check,.ps-reset,.ps-acts button{border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:0 12px;cursor:pointer;font-family:inherit;font-size:13px}
+.ps-check:hover,.ps-reset:hover:not(:disabled){border-color:var(--h-input)}
+.ps-reset:disabled{opacity:.45;cursor:default}
+.ps-now{margin-top:6px;font-size:12.5px;color:var(--muted)}
+.ps-result{margin-top:8px;padding:7px 10px;border-radius:7px;font-size:13px;line-height:1.6}
+.ps-result.ok{background:var(--ok-bg);color:#1f5f3d}
+.ps-result.ng{background:var(--danger-bg);color:#8c2a1f}
+.ps-result.wait{background:#eef3f6;color:var(--h-meta)}
+.ps-acts{display:flex;gap:6px;margin-top:6px}
+.ps-acts button{height:28px}
+
+/* ---------- アクセス権限・利用状況 ---------- */
+.master-ro{height:24px;display:inline-flex;align-items:center;padding:0 10px;border-radius:12px;background:var(--amber-soft);color:var(--warn-ink);font-size:12.5px;font-weight:700}
+.m-ident{font-family:Consolas,"Yu Gothic UI",monospace;font-size:13px}
+.m-chip.c-me{margin-left:8px;background:var(--input-soft);color:var(--h-input);height:18px;font-size:11px;padding:0 7px}
+.pz-summary{display:grid;grid-template-columns:repeat(4,minmax(0,160px));gap:10px;align-items:stretch;margin-bottom:10px}
+.pz-kpi{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+.pz-kpi span{display:block;font-size:12px;color:var(--muted)}
+.pz-kpi b{font-size:20px;color:var(--ink);font-variant-numeric:tabular-nums}
+.pz-kpi i{font-style:normal;margin-left:3px;color:var(--muted);font-size:12px}
+.pz-kpi.warn{background:#fff8ea;border-color:#f0d49a}
+.pz-kpi.warn b{color:var(--warn-ink)}
+.pz-where{grid-column:1/-1;margin:0;color:var(--muted);font-size:12.5px;line-height:1.5}
+.pz-where code{font-family:Consolas,monospace;font-size:12px}
+.pz-filter{display:flex;gap:6px;margin-bottom:8px}
+/* 利用状況の中の見方（PC ごとの状況・使用の履歴）: 下線のタブ。濃い方がいま見ている方 */
+.pz-views{display:flex;gap:2px;margin:0 0 12px;border-bottom:1px solid var(--line)}
+.pz-view{height:34px;padding:0 16px;border:0;border-bottom:3px solid transparent;background:none;color:var(--muted);font-weight:700;font-size:13.5px;cursor:pointer;font-family:inherit;margin-bottom:-1px}
+.pz-view.on{color:var(--h-input);border-bottom-color:var(--h-input)}
+.pz-view:hover:not(.on){color:var(--ink)}
+.pz-hhead{display:flex;align-items:center;gap:8px;margin-bottom:8px;color:var(--muted);font-size:12.5px}
+.pz-only{font-weight:700;color:var(--ink);background:var(--input-soft);border-radius:12px;padding:3px 10px}
+.pz-history td.pz-same{color:transparent}          /* 同じ日の 2 行目からは日付を出さない（日の区切りが目で追える） */
+.pz-history td.pz-time{font-variant-numeric:tabular-nums;white-space:nowrap}
+.pz-history td.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.pz-more{text-align:center;margin:8px 0}
+.pz-keep{margin-top:14px}
+.pz-days input{width:6em;height:28px;border:1px solid var(--line);border-radius:6px;padding:0 8px;font-family:inherit;text-align:right}
+.pz-f{height:28px;padding:0 12px;border-radius:14px;border:1px solid var(--line);background:var(--surface);color:var(--muted);font-weight:700;font-size:12.5px;cursor:pointer;font-family:inherit}
+.pz-f.on{background:var(--h-input);color:var(--on-fill);border-color:var(--h-input)}
+.pz-wrap{border:1px solid var(--line);border-radius:10px}
+table.master-table.pz-table{table-layout:auto}   /* 列の幅は中身に合わせる（区分の札などを切らない） */
+.pz-table th.grow{width:100%}
+.pz-table tbody tr{cursor:default}
+.pz-table tr.is-me td{background:#f5f9fd}
+.pz-ver{font-variant-numeric:tabular-nums;font-weight:700;margin-right:4px}
+.pz-acts{text-align:right}
+.pz-btn{height:26px;padding:0 10px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--h-input);font-size:12.5px;cursor:pointer;margin-left:4px;font-family:inherit}
+.pz-btn:hover{background:var(--surface-5)}
+.pz-btn.danger{color:var(--danger);border-color:var(--danger-line)}
+.pz-btn.danger:hover{background:var(--danger-bg)}
+.pz-reason{height:26px;width:14em;border:1px solid var(--line);border-radius:6px;padding:0 8px;font-family:inherit}
+
+/* ---------------- アプリの配布（① 版を置く → ② 配る版を選ぶ → ③ 各 PC がそろう） ----------------
+   流れは左→右に読む 3 つの札と矢印（作業の順に目が進む）。決まっている段は藍の縁、これから変わる段はアンバー。
+   置き場に届かないときだけ赤の帯。版の一覧は利用状況と同じ表の形（同じ札の色: 配っている＝緑・前に配った＝灰）。 */
+.dz-where{margin:0 0 10px;font-size:13px;color:var(--muted)}
+.dz-where code,.dz-new code,.dz-put code{font-family:Consolas,"BIZ UDGothic",monospace;font-size:12.5px;background:var(--surface-4);padding:1px 5px;border-radius:4px;word-break:break-all}
+.dz-bad{padding:12px 14px;border-radius:10px;background:var(--danger-bg);border:1px solid var(--danger-line);color:#7a2418;font-size:13px;line-height:1.7}
+.dz-flow{list-style:none;margin:0 0 12px;padding:0;display:grid;grid-template-columns:1fr 26px 1fr 26px 1.3fr;align-items:stretch}
+.dz-step{background:var(--surface-2);border:1px solid var(--line);border-top:3px solid #c9d3db;border-radius:10px;padding:9px 12px;display:flex;flex-direction:column;gap:2px}
+.dz-step b{font-size:13.5px;color:var(--ink)}
+.dz-step span{font-size:13px;color:var(--ro-ink)}
+.dz-step small{font-size:12px;color:var(--muted);line-height:1.5}
+.dz-step.is-set{border-top-color:var(--h-input)}
+.dz-step.is-pending{border-top-color:var(--accent);background:var(--amber-soft)}
+.dz-arrow{position:relative}
+.dz-arrow::after{content:"";position:absolute;left:7px;top:50%;margin-top:-6px;border:6px solid transparent;border-left:9px solid #a9b8c4}
+.dz-new{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start;padding:10px 14px;margin-bottom:12px;border:1px solid var(--line);border-left:4px solid var(--h-xfer);border-radius:10px;background:var(--surface)}
+.dz-new > b{font-size:13.5px;color:var(--h-xfer);white-space:nowrap;padding-top:1px}
+.dz-new span{font-size:13px;line-height:1.8;color:var(--ro-ink)}
+.dz-new small{display:block;color:var(--muted);font-size:12px;line-height:1.6}
+.dz-put{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.dz-put > small{font-size:12.5px;color:var(--muted);line-height:1.6}
+.dz-pick{align-self:flex-start;display:inline-flex;align-items:center;height:34px;padding:0 16px;cursor:pointer}
+.dz-progress{padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+.dz-ptitle{font-weight:700;font-size:13.5px;color:var(--ink)}
+.dz-bar{height:6px;margin:8px 0 6px;border-radius:99px;background:#e3e9ee;overflow:hidden}
+.dz-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--h-xfer),#4fb3ab);border-radius:99px;transition:width .3s}
+.dz-bar.is-indet i{width:35%;animation:dzslide 1.4s ease-in-out infinite}
+@keyframes dzslide{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
+@media (prefers-reduced-motion:reduce){.dz-bar.is-indet i{animation:none;width:100%;opacity:.5}}
+.dz-pmeta{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.dz-progress small{display:block;margin-top:4px;font-size:12px;color:var(--muted)}
+.pz-table tr.is-live td{background:#f1faf5}
+.pz-btn.dz-go{color:var(--on-fill);background:var(--h-input);border-color:var(--h-input);font-weight:700}
+.pz-btn.dz-go:hover{background:#34557b}

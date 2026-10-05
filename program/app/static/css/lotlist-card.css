@@ -1,0 +1,73 @@
+/* =========================================================================
+   異常ロット一覧のカード（行をダブルクリック）
+   - 窓は表示列の窓と同じ見出し帯（.lc-head）・同じ閉じるボタン。後ろの一覧を触れるよう、表示列の窓より下に重ねる。
+   - 項目は「名前（小さく・灰）→ 値（大きく・濃く）」の2段。値を読む目の動きを短くする（図と地）。
+   - 色: 藍＝主操作（計算画面で開く）・選んでいる、アンバー＝落とす先（並べ替えのドラッグ）、読み替えの色は一覧のセルと同じ（cell-*）。
+   ========================================================================= */
+.ll-cardwin{position:fixed;z-index:75;display:flex;flex-direction:column;background:var(--surface);border:1px solid #9fb4c2;border-radius:12px;
+  box-shadow:0 26px 70px rgba(10,30,45,.32);overflow:hidden;overflow:clip;resize:both;min-width:440px;min-height:320px;font-size:13.5px}
+.ll-cardwin:focus{outline:none}
+.ll-cardwin button{height:28px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink);cursor:pointer;padding:0 10px;font-family:inherit;font-size:13px;white-space:nowrap}
+.ll-cardwin button:hover:not(:disabled){border-color:var(--h-input)}
+.ll-cardwin button:disabled{opacity:.45;cursor:default}
+.ll-cardwin .lc-primary{background:var(--h-input);border-color:var(--h-input);color:var(--on-fill);font-weight:700;padding:0 16px}
+.ll-cardwin .lc-primary:hover:not(:disabled){background:#35587f}
+.ll-cardwin .lc-sp{flex:1}
+
+/* 見出し: ロット番号を大きく。前後の行は見出しの右（読む流れの終わり＝次へ進む位置） */
+.lk-head{align-items:center}
+.lk-title{flex:1;min-width:0}
+.lk-title h3{margin:1px 0 2px;font-size:21px;letter-spacing:.03em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lk-nav{display:flex;gap:6px}
+.ll-cardwin .lk-nav button,.ll-cardwin .lc-x{width:34px;height:30px;padding:0;border-radius:999px;border-color:var(--on-dark-line);background:var(--on-dark-fill);color:var(--on-fill)}
+.ll-cardwin .lc-x{width:30px;font-size:18px;line-height:1}
+.ll-cardwin .lk-nav button:hover:not(:disabled),.ll-cardwin .lc-x:hover{background:var(--on-dark-hover);border-color:var(--on-fill)}
+/* 主操作（計算画面で開く）は見出しの中: 暗い帯の上で目立つ白い面＋藍の字 */
+.ll-cardwin .lk-nav .lk-pick{width:auto;margin-right:6px;height:30px;border-color:var(--on-fill);background:var(--surface);color:var(--h-input);font-weight:800;padding:0 14px}
+.ll-cardwin .lk-nav .lk-pick:hover:not(:disabled){background:var(--input-soft);border-color:var(--on-fill)}
+
+/* 同じロットの行（札で切り替え） */
+.lk-sibs{display:flex;align-items:center;gap:6px;padding:7px 16px;background:var(--input-soft);border-bottom:1px solid #c9d8e8;flex:0 0 auto}
+.lk-sibs em{font-style:normal;color:var(--h-input);font-weight:800;font-size:12.5px;margin-right:4px}
+.ll-cardwin .lk-sibs button{min-width:30px;height:26px;padding:0 8px;border-radius:999px;font-weight:800;color:var(--h-input)}
+.ll-cardwin .lk-sibs button[aria-pressed="true"]{background:var(--h-input);border-color:var(--h-input);color:var(--on-fill)}
+
+/* 道具の段: 列数・文字（押せる選択肢を並べる＝思い出させない）→ 空欄 → 配置の編集 → 主操作（右端） */
+.lk-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:8px 16px;border-bottom:1px solid var(--line);flex:0 0 auto}
+.lk-seg{display:inline-flex;align-items:center}
+.lk-seg em{font-style:normal;color:var(--muted);font-weight:700;font-size:12.5px;margin-right:6px}
+.ll-cardwin .lk-seg button{border-radius:0;margin-left:-1px;min-width:34px;padding:0 8px}
+.ll-cardwin .lk-seg button:first-of-type{border-radius:7px 0 0 7px;margin-left:0}
+.ll-cardwin .lk-seg button:last-of-type{border-radius:0 7px 7px 0}
+.ll-cardwin .lk-seg button[aria-checked="true"]{position:relative;background:var(--input-soft);border-color:var(--h-input);color:var(--h-input);font-weight:800}
+.lk-check{display:inline-flex;align-items:center;gap:5px;font-size:13px;color:var(--ink);cursor:pointer}
+.ll-cardwin .lk-edit[aria-pressed="true"]{background:var(--amber-soft);border-color:var(--amber-line);color:var(--amber-ink);font-weight:700}
+
+/* 項目 */
+.lk-body{flex:1;min-height:0;overflow:auto;padding:14px 16px;background:var(--surface-2)}
+.lk-grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));align-items:start}
+.lk-grid.is-fixed{grid-template-columns:repeat(var(--lk-cols),minmax(0,1fr))}
+.lk-f{position:relative;min-width:0;display:flex;flex-direction:column;gap:3px;padding:8px 12px 9px;background:var(--surface);border:1px solid var(--line);border-radius:9px}
+.lk-l{display:flex;align-items:center;gap:4px;font-size:var(--fs-xs);color:var(--muted);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lk-v{font-size:15.5px;line-height:1.35;color:var(--ink);font-weight:700;white-space:pre-wrap;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.lk-f.is-empty .lk-v{color:var(--faint);font-weight:400}
+.lk-grid.size-s .lk-l{font-size:11px}.lk-grid.size-s .lk-v{font-size:13.5px}.lk-grid.size-s .lk-f{padding:6px 10px 7px}
+.lk-grid.size-l .lk-l{font-size:var(--fs-sm)}.lk-grid.size-l .lk-v{font-size:19px}
+.lk-empty{margin:8px 2px;color:var(--muted)}
+
+/* 配置の編集: 枠を点線にして「動かせる」ことを形で示す。落とす先はアンバーの線 */
+.lk-grid.is-editing .lk-f{border-style:dashed;border-color:#b7c6d2;cursor:grab}
+.lk-grid.is-editing .lk-f.dragging{opacity:.45}
+.lk-grid .lk-f.drop-before{box-shadow:inset 3px 0 0 var(--accent)}
+.lk-grid .lk-f.drop-after{box-shadow:inset -3px 0 0 var(--accent)}
+.lk-grip{font-style:normal;color:#9aabb8;font-size:13px;letter-spacing:-2px}
+.lk-fe{display:flex;gap:4px;margin-top:4px;padding-top:6px;border-top:1px dashed var(--line)}
+.ll-cardwin .lk-fe button{height:24px;padding:0 7px;font-size:12px}
+.ll-cardwin .lk-fe button[aria-pressed="true"]{background:var(--input-soft);border-color:var(--h-input);color:var(--h-input);font-weight:800}
+.ll-cardwin .lk-fe button[data-hide]{margin-left:auto;color:var(--danger)}
+.ll-cardwin .lk-fe button[data-hide]:hover{border-color:var(--danger);background:var(--danger-bg)}
+.lk-tray{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 16px;border-top:1px solid var(--line);background:var(--surface);flex:0 0 auto;max-height:30%;overflow:auto}
+.lk-tray em{font-style:normal;color:var(--muted);font-weight:800;font-size:12.5px;margin-right:4px}
+.lk-tray small{color:var(--muted)}
+.ll-cardwin .lk-tray button{height:26px;border-style:dashed;color:var(--h-input);font-weight:700}
+.lk-foot .lc-note{flex:0 1 auto}

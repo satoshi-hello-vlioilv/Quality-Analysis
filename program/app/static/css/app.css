@@ -1,0 +1,512 @@
+/* =========================================================================
+   転写距離・ピッチ解析  UI
+   設計方針
+   - 情報アーキテクチャ : 左=操作/条件・基本情報・結果、右=データ(ワークシート)。
+                          切替はタブ2つに絞り、詳細列は「列表示」で必要な時だけ開く
+                          （Hick's law / Progressive Disclosure）。
+   - 認知心理学        : 入力できるセル=暖色(クリーム)、自動計算セル=寒色の淡いグレー。
+                          色の面だけで「触れる／触れない」を伝え、濃い縦罫線は引かない。
+                          列のまとまりは見出しの色帯と、まとまりの境の淡い線で示す
+                          （Gestalt の近接・共通領域）。行は横の細線とホバーで追う。
+   - 可読性            : 文字の段は --fs-* の5段だけ。基準は 14px（旧 12.5px から一律に拡大）。
+                          数値は等幅数字(tabular-nums)で桁をそろえる。
+   - 色彩              : 藍(入力)→青緑(転写)→緑(ピッチ)の類似色相を低彩度で使い、
+                          強調はアンバー1色・発見設備は赤1色。
+   - 画面設計          : 表示域(100vh)から行の高さを逆算し(--row)、25行と左の全カードが
+                          スクロール無しで1画面に収まる。表は横幅いっぱいに広がり、
+                          足りない画面でだけ横スクロールへ切り替える（No.・設備は固定）。
+   ========================================================================= */
+:root{
+  --bg:#eef2f5; --surface:#ffffff; --ink:#1b2733; --muted:#5d6b77; --faint:#8995a0;
+  --line:#dbe3e9; --line-soft:#edf1f4;
+
+  /* 列のまとまり（低彩度・類似色相） */
+  --h-input:#3f6591;   /* 入力系: 藍 */
+  --h-xfer:#2f7d78;    /* 転写系: 青緑 */
+  --h-pitch:#3f7d55;   /* ピッチ系: 緑 */
+  --h-meta:#4a5a68;    /* 基礎: 灰藍 */
+
+  /* 入力できる／できない（最重要のアフォーダンス） */
+  --edit-bg:#fff8ea; --edit-line:#ecd29a; --edit-focus:#e6a52e; --edit-field:#fffdf8;
+  --ro-bg:#f5f8fa; --ro-ink:#2c3a46;
+
+  --found:#c0392b; --found-bg:#fdeee9;
+  --ok:#1f7a4d; --ok-bg:#e0f3e8;
+  --accent:#e6a52e;
+  --danger:#c0392b; --danger-bg:#fdeeec; --danger-line:#e6bcb6;
+  --warn-ink:#8a5a00;                 /* 注意の文字（アンバーの濃い色） */
+  --origin:#8a2a1c;                   /* 仮の発生設備（発見設備の赤より深い赤） */
+  --focus-ring:rgba(230,165,46,.22);  /* 入力欄のフォーカスの輪（アンバー） */
+  --pop-line:#b9ccd4; --pop-shadow:rgba(12,34,48,.22);    /* 浮かぶメニュー・候補の枠と影 */
+  --on-fill:#fff;                     /* 色を塗った面（ボタン・札・見出し帯）の上の文字 */
+  --accent-ink:#3a2a00;               /* アンバー（--accent）の面の上の文字 */
+  /* 白（--surface）と地（--bg）のあいだの面の段。数が大きいほど沈む（奥の面・足元・ホバー・見出し・淡い札） */
+  --surface-1:#fbfcfd; --surface-2:#f6f9fb; --surface-3:#f4f7f9; --surface-4:#f1f5f8; --surface-5:#eef2f5;
+  /* 暗い見出し帯の上のボタン（白の透け: 面・ホバー・枠） */
+  --on-dark-fill:rgba(255,255,255,.08); --on-dark-hover:rgba(255,255,255,.2); --on-dark-line:rgba(255,255,255,.45);
+  /* 淡い面（-soft）と、その上の濃い文字（-ink）の組。札・取込結果・状態の印で使う */
+  --ok-soft:#e3f3ea; --ok-ink:#1c7c4a;           /* できた・有効 */
+  --info-soft:#e6effa; --info-ink:#2b5a8a;       /* 読み替え・上巻き など中立の情報 */
+  --plain-soft:#eef2f6; --plain-ink:#5a6b7c;     /* 目立たせない数・印 */
+  --input-soft:#e3ecf5;                          /* 藍（--h-input）の文字を置く面 */
+  --warn-soft:#fff1d6; --amber-soft:#fff4e0;     /* 注意（--warn-ink と組む） */
+  --amber-pale:#fff3d6; --amber-line:#e8b44c; --amber-ink:#6b4a0f;   /* 注意の帯（元データが古い・参照先の変更）・選んでいる行 */
+  --x-defect:#d62c1a;                 /* 3D の汚れの印（explain3d.js の COLOR.defect と同じ） */
+  /* ロット一覧の色（パネル・メニューは一覧の外＝body の直下に出るので :root に置く） */
+  --ll-teal:var(--h-xfer); --ll-teal-dark:#1f5f5b; --ll-pale:#e5f3f1; --ll-warn:#b7791f; --ll-warn-bg:#fff5e0;
+
+  /* 文字の段（一律に大きく） */
+  --fs-xs:11.5px; --fs-sm:12.5px; --fs-md:14px; --fs-lg:15px; --fs-xl:18px;
+
+  --header-h:52px; --gap:12px; --left-w:312px; --radius:10px;
+  /* 表の行の高さ: 表示域から逆算。見出し帯・ツールバー・表見出し・余白 ≒ 175px、行の罫線 25px、25 行。
+     縦は 5% 残す（取込メッセージ等が出ても窮屈にならない余裕） */
+  --row:clamp(24px, calc((95vh - 200px) / 25), 34px);
+  --shadow:0 4px 18px rgba(20,40,55,.08); --shadow-sm:0 1px 3px rgba(20,40,55,.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);overflow:hidden;
+  font-family:"Yu Gothic UI","Meiryo UI","Meiryo","Segoe UI",sans-serif;font-size:var(--fs-md);line-height:1.4;
+  -webkit-font-smoothing:antialiased}
+button,input,select,textarea{font-family:inherit}
+[hidden]{display:none!important}   /* hidden 属性の要素は、クラスが display を決めていても出さない（各所の X[hidden] を1つに） */
+
+/* ---------- header ---------- */
+/* 見出し帯の色（アプリ・マスタ管理・列の設定・読み替えルール）は1つ。
+   グラデーションは変数（var）に入れると Chromium の描き方がわずかに変わるので、ここで選択子をまとめて1回だけ書く */
+header,.master-head,.lc-head{background:linear-gradient(110deg,#1c3550,#2b5f79)}
+header{height:var(--header-h);padding:0 18px;
+  color:var(--on-fill);display:flex;align-items:center;justify-content:space-between;flex:0 0 auto}
+.brand .eyebrow{font-size:10px;letter-spacing:.22em;opacity:.7}
+.brand h1{font-size:var(--fs-xl);margin:0;font-weight:700;letter-spacing:.02em;display:flex;align-items:baseline;gap:10px;white-space:nowrap}
+.brand h1 .brand-sub{font-size:var(--fs-sm);font-weight:500;letter-spacing:.04em;opacity:.78}
+.header-right{display:flex;align-items:center;gap:8px}
+.pill{font-size:var(--fs-sm);padding:4px 11px;border-radius:999px;border:1px solid rgba(255,255,255,.3);white-space:nowrap}
+.pill.conn-ok{background:rgba(31,122,77,.28);border-color:rgba(120,220,170,.55)}
+/* 札の状態: 切れた・失敗（赤）／ 注意して待つ（アンバー）／ できた（緑） */
+.pill.conn-bad,#status.err{background:rgba(192,57,43,.5);border-color:rgba(255,150,140,.75)}
+#modeBadge.paste-only,#status.busy{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+#status.ok{background:rgba(31,122,77,.35);border-color:rgba(120,220,170,.55)}
+.quit{height:32px;border:1px solid var(--on-dark-line);background:var(--on-dark-fill);color:var(--on-fill);
+  border-radius:8px;padding:0 14px;font-weight:700;cursor:pointer;font-size:var(--fs-sm)}
+.quit:hover{background:var(--danger);border-color:var(--danger)}
+.btn-ghost.on-dark{height:32px;border-color:var(--on-dark-line);color:var(--on-fill);background:var(--on-dark-fill)}
+.btn-ghost.on-dark:hover{background:var(--on-dark-hover)}
+
+/* ---------- layout(1画面に収める基準) ---------- */
+.layout{display:grid;grid-template-columns:var(--left-w) minmax(0,1fr);gap:var(--gap);padding:var(--gap);
+  height:calc(100vh - var(--header-h));min-height:0}
+@media(max-width:1024px){
+  html,body{overflow:auto}
+  .layout{grid-template-columns:1fr;height:auto}
+}
+
+/* ---------- 左パネル ---------- */
+.side{display:flex;flex-direction:column;gap:9px;min-height:0;overflow:auto}
+.card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden;flex:0 0 auto}
+.card-h{color:var(--h-meta);font-weight:700;font-size:var(--fs-md);padding:8px 14px 4px;
+  display:flex;align-items:baseline;gap:8px}
+.card-h::before{content:"";width:4px;height:14px;border-radius:2px;background:var(--h-meta);align-self:center;margin-right:-2px}
+.card-h.accent{color:var(--h-input)}
+.card-h.accent::before{background:var(--h-input)}
+.card-h-sub{margin-left:auto;font-weight:600;color:var(--faint);font-size:var(--fs-xs)}
+
+.kv{display:flex;align-items:center;gap:8px;padding:0 14px;min-height:30px}
+.kv span{flex:0 0 92px;color:var(--muted);font-size:var(--fs-sm);line-height:1.2}
+.kv b{flex:1;min-width:0;text-align:right;font-size:var(--fs-md);font-weight:700;font-variant-numeric:tabular-nums;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kv i{flex:0 0 26px;color:var(--faint);font-size:var(--fs-xs);font-style:normal}
+.kv.edit{padding-top:2px;padding-bottom:2px}
+.in{width:100%;min-width:0;height:27px;border:1px solid var(--edit-line);background:var(--edit-bg);border-radius:7px;
+  padding:0 8px;text-align:right;font-size:var(--fs-md);font-weight:700;color:var(--ink);
+  font-variant-numeric:tabular-nums;transition:border-color .12s,box-shadow .12s}
+.in:hover{border-color:var(--edit-focus)}
+.in:focus{outline:none;border-color:var(--edit-focus);box-shadow:0 0 0 3px var(--focus-ring);background:var(--edit-field)}
+select.in{text-align:left;font-weight:600;padding-right:4px}
+/* 未入力の必須欄（汚れ位置 A・B）: 次にすることとして目に入るよう、枠を濃く */
+.in:placeholder-shown{border:1.5px dashed var(--edit-focus);background:#fff3d9}
+.in::placeholder{color:#b07a10;font-weight:600;text-align:right}
+.card > .kv:last-child,.card > .kpi{margin-bottom:6px}
+
+/* 基本情報: 2列。ラベルを値の上に置き、値に横幅をまるごと渡す（見切れ防止） */
+.kv-grid{display:grid;grid-template-columns:1fr 1fr;column-gap:4px;padding:0 0 6px}
+.kv-grid.stack .kv{flex-wrap:wrap;align-items:baseline;gap:0 4px;min-height:0;padding:3px 14px}
+.kv-grid.stack .kv span{flex:0 0 100%;font-size:var(--fs-xs);color:var(--muted)}
+.kv-grid.stack .kv b{flex:0 1 auto;text-align:left;font-size:var(--fs-lg);line-height:1.25}
+.kv-grid.stack .kv i{flex:0 0 auto}
+
+/* 結果サマリ: 数字を大きく（一目で読む値） */
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:6px;padding:2px 12px 4px}
+.kpi-item{background:var(--ro-bg);border-radius:8px;padding:6px 10px;display:flex;flex-wrap:wrap;align-items:baseline}
+.kpi-item span{flex:0 0 100%;font-size:var(--fs-xs);color:var(--muted);white-space:nowrap}
+.kpi-item b{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--ink)}
+.kpi-item i{font-style:normal;font-size:var(--fs-xs);color:var(--faint);margin-left:3px}
+
+.card-search{flex:0 0 auto}
+.searchrow{display:flex;gap:8px;padding:10px 14px 7px}
+.searchrow input{flex:1;min-width:0;height:34px;border:1px solid var(--edit-line);background:var(--edit-bg);border-radius:8px;
+  padding:0 10px;font-size:var(--fs-lg);font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+.searchrow input:focus{outline:none;border-color:var(--edit-focus);box-shadow:0 0 0 3px var(--focus-ring)}
+.searchrow input::placeholder{text-transform:none;font-weight:400;font-size:var(--fs-sm);letter-spacing:0}
+.searchrow button:disabled{opacity:.55;cursor:progress}
+.searchrow button{white-space:nowrap;height:34px;border:0;border-radius:8px;background:var(--h-input);color:var(--on-fill);padding:0 18px;
+  font-weight:700;cursor:pointer;font-size:var(--fs-md)}
+.searchrow button:hover{background:#35577f}
+.note{padding:8px 14px;font-size:var(--fs-xs);color:var(--warn-ink);background:#fff6e6;line-height:1.5}
+/* LotDsp 進度情報の取込: 検索欄の下は1行（状態のアイコン・ロット・要約・件数のチップ）。中身は畳む（details） */
+.import-note{padding:0 14px 9px;background:none;color:var(--ink)}
+.imp{font-size:var(--fs-sm);line-height:1.5}
+.imp summary,.imp:not(details){display:flex;align-items:center;gap:6px;min-height:24px;list-style:none;cursor:default}
+.imp summary{cursor:pointer;border-radius:6px;padding:0 4px;margin:0 -4px}
+.imp summary::-webkit-details-marker{display:none}
+.imp summary:hover{background:var(--ro-bg)}
+.imp summary:focus-visible{outline:2px solid var(--h-input);outline-offset:1px}
+.imp b{color:var(--ink);letter-spacing:.02em}
+.imp-text{color:var(--muted)}
+.imp-ic{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;font-size:11px;font-weight:800;flex:none}
+.imp-ic.ok{background:var(--ok-soft);color:var(--ok-ink)}
+.imp-ic.warn{background:var(--warn-soft);color:var(--warn-ink)}
+.imp-spin{width:14px;height:14px;border-radius:50%;border:2px solid #c9d6e2;border-top-color:var(--h-input);animation:imp-spin .8s linear infinite;flex:none}
+@keyframes imp-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.imp-spin{animation:none;border-top-color:#c9d6e2;background:var(--h-input)}}
+.imp-chip{display:inline-flex;align-items:center;gap:2px;height:20px;padding:0 7px;border-radius:10px;font-size:var(--fs-xs);font-weight:700;
+  background:var(--plain-soft);color:#4b5f72;flex:none}
+.imp-chip i{font-style:normal;font-variant-numeric:tabular-nums}
+.imp-chip.warn{background:var(--warn-soft);color:var(--warn-ink)}
+.imp-chip.plan{background:var(--plain-soft);color:var(--plain-ink)}
+.imp-chip.alias{background:var(--info-soft);color:var(--info-ink)}
+.imp-more{margin-left:auto;width:0;height:0;border:4px solid transparent;border-top-color:#8193a4;border-bottom:0;transition:transform .15s}
+details[open]>summary .imp-more{transform:rotate(180deg)}
+.imp ul{margin:4px 0 0;padding:6px 10px 6px 12px;list-style:none;background:var(--ro-bg);border-radius:6px;font-size:var(--fs-xs);color:var(--ro-ink);line-height:1.55}
+.imp ul li+li{margin-top:3px}
+.imp .warn{color:var(--warn-ink)}
+.fetch-overlay{position:fixed;inset:0;z-index:1200;display:grid;place-items:center;background:rgba(15,31,46,.38);backdrop-filter:blur(1.5px)}
+.fetch-card{width:min(420px,calc(100vw - 32px));background:var(--surface);border-radius:14px;box-shadow:0 18px 50px rgba(10,30,50,.28);padding:18px 20px 14px}
+.fetch-head{display:flex;align-items:center;gap:10px}
+.fetch-head h3{margin:0;font-size:var(--fs-lg);color:var(--ink)}
+.fetch-lot{margin-left:auto;font-size:var(--fs-lg);letter-spacing:.04em;color:var(--h-input)}
+/* 動くものは「いま処理している段階」の回転の1つだけ（見出しにも回転を置くと、同じ「動いている」を2回言う）。左端は見出し・道・段階でそろえる */
+.fetch-route{margin:4px 0 12px;font-size:var(--fs-sm);color:var(--muted)}
+.fetch-steps{list-style:none;margin:0;padding:0;display:grid;gap:7px}
+.fetch-steps li{display:flex;align-items:center;gap:10px;font-size:var(--fs-md);color:#9aa8b5}
+.fetch-steps li i{width:16px;height:16px;border-radius:50%;border:2px solid #cfd8e1;flex:none;display:grid;place-items:center;font-style:normal;font-size:10px;font-weight:800}
+.fetch-steps li.done{color:var(--ink)}
+.fetch-steps li.done i{background:var(--ok-ink);border-color:var(--ok-ink);color:var(--on-fill)}
+.fetch-steps li.done i::after{content:"✓"}
+.fetch-steps li.skip{color:#9aa8b5;text-decoration:line-through;text-decoration-color:#cfd8e1}
+.fetch-steps li.skip i{border-style:dashed}
+.fetch-steps li.now{color:var(--ink);font-weight:700}
+.fetch-steps li.now i{border-color:#c9d6e2;border-top-color:var(--h-input);animation:imp-spin .8s linear infinite}
+.fetch-hint{margin-top:12px;padding:8px 10px;border-radius:8px;background:var(--amber-soft);color:#7a4f00;font-size:var(--fs-sm);line-height:1.55}
+.fetch-foot{display:flex;align-items:center;margin-top:14px;padding-top:10px;border-top:1px solid var(--line)}
+.fetch-time{font-variant-numeric:tabular-nums;color:var(--muted);font-size:var(--fs-sm)}
+.fetch-foot button{margin-left:auto}
+.fetch-foot kbd{font-size:10px;padding:0 4px;border:1px solid var(--line);border-radius:3px;color:var(--muted);margin-left:2px}
+@media (prefers-reduced-motion:reduce){.fetch-steps li.now i{animation:none;background:var(--h-input)}}
+.lotdsp-dialog-body{padding:16px 20px;overflow:auto;font-size:var(--fs-md);line-height:1.65;color:var(--ink)}
+.lotdsp-dialog-body p{margin:0 0 8px;color:var(--muted)}
+.lotdsp-dialog-body ol{margin:0 0 10px;padding-left:20px}
+.lotdsp-dialog-body li{margin:5px 0}
+.lotdsp-dialog-body kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;
+  background:var(--surface-2);font-family:inherit;font-size:var(--fs-sm)}
+.paste-target{width:100%;border:2px dashed var(--edit-line);background:var(--edit-bg);border-radius:8px;
+  padding:10px;font-size:var(--fs-md);resize:none}
+.paste-target:focus{outline:none;border-color:var(--edit-focus)}
+.lotdsp-dialog-foot{display:flex;align-items:center;gap:10px;margin-top:10px}
+.file-pick{display:inline-flex;align-items:center;white-space:nowrap;flex:0 0 auto}
+
+/* ---------- ワークシート ---------- */
+.sheet{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);
+  overflow:hidden;display:flex;flex-direction:column;min-height:0}
+.toolbar{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line-soft);flex:0 0 auto}
+/* タブ: セグメント型（並ぶ2つから1つを選ぶことが一目で分かる） */
+.views{display:flex;gap:2px;padding:3px;background:var(--bg);border-radius:9px}
+.views .tab{border:0;background:transparent;color:var(--muted);border-radius:7px;padding:5px 16px;
+  font-weight:700;cursor:pointer;font-size:var(--fs-sm)}
+.views .tab:hover{color:var(--ink)}
+.views .tab.active{background:var(--surface);color:var(--h-input);box-shadow:0 1px 3px rgba(20,40,55,.15)}
+.spacer{flex:1}
+.btn-ghost{height:30px;border:1px solid var(--line);background:var(--surface);color:var(--h-meta);border-radius:8px;
+  padding:0 13px;font-weight:700;cursor:pointer;font-size:var(--fs-sm)}
+.btn-ghost:hover{background:var(--surface-4);border-color:#c7d2da}
+.col-menu{position:relative}
+.col-panel{position:absolute;right:0;top:36px;z-index:30;background:var(--surface);border:1px solid var(--line);
+  border-radius:10px;box-shadow:var(--shadow);padding:8px;min-width:250px;max-height:70vh;overflow:auto}
+.col-panel label{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;font-size:var(--fs-sm);cursor:pointer}
+.col-panel label:hover{background:#eef4f7}
+.col-panel .cp-head{font-size:var(--fs-xs);color:var(--muted);padding:2px 8px 6px}
+.col-panel .cp-group{font-size:var(--fs-xs);font-weight:700;color:var(--h-input);padding:8px 8px 2px;letter-spacing:.04em}
+.col-panel .cp-group:first-of-type{padding-top:2px}
+/* 並べ替え: 行はつまみ（⋮⋮）でドラッグ・▲▼ で1つずつ。落とす所は藍の線で示す（表の見出しも同じ） */
+.col-panel .cp-head small{display:block;margin-top:1px;color:var(--faint)}
+.col-panel .cp-row{display:flex;align-items:center;gap:2px;border-radius:6px}
+.col-panel .cp-row label{flex:1;min-width:0}
+.col-panel .cp-grip{cursor:grab;color:var(--faint);font-size:11px;letter-spacing:-2px;padding:0 2px 0 4px;user-select:none}
+.col-panel .cp-move{width:22px;height:22px;border:1px solid transparent;border-radius:5px;background:none;color:var(--muted);font-size:9px;cursor:pointer;padding:0}
+.col-panel .cp-move:hover:not(:disabled){border-color:var(--line);background:var(--surface-3);color:var(--h-input)}
+.col-panel .cp-move:disabled{opacity:.25;cursor:default}
+.col-panel .cp-row.dragging{opacity:.45}
+.col-panel .cp-row.drop-before{box-shadow:inset 0 2px 0 var(--h-input)}
+.col-panel .cp-row.drop-after{box-shadow:inset 0 -2px 0 var(--h-input)}
+.col-panel .cp-foot{border-top:1px solid var(--line-soft);margin-top:6px;padding:6px 8px 0;text-align:right}
+.col-panel .cp-reset{height:26px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--muted);font-size:var(--fs-xs);cursor:pointer;padding:0 10px}
+.col-panel .cp-reset:hover:not(:disabled){color:var(--h-input);border-color:var(--h-input)}
+.col-panel .cp-reset:disabled{opacity:.45;cursor:default}
+#wsHead th[draggable="true"]{cursor:grab}
+#wsHead th.dragging{opacity:.5}
+#wsHead th.drop-before{box-shadow:inset 3px 0 0 var(--accent)}
+#wsHead th.drop-after{box-shadow:inset -3px 0 0 var(--accent)}
+
+.legend-inline{display:flex;align-items:center;gap:12px;font-size:var(--fs-xs);color:var(--muted);white-space:nowrap}
+.legend-inline .sw{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-2px;margin-right:4px}
+.sw-edit{background:var(--edit-bg);border:1px solid var(--edit-line)}
+.sw-calc{background:var(--ro-bg);border:1px solid var(--line)}
+.sw-found{background:var(--found-bg);border:1px solid var(--found)}
+
+/* 表は中身の高さまで。説明パネルを開いている間は、足りなければ表の中でスクロール */
+.table-wrap{overflow:auto;flex:0 1 auto;min-height:calc(var(--row) * 4 + 50px)}
+.sheet.explain-closed .table-wrap{flex:1 1 auto}
+
+/* ---------- 計算の考え方（3D） ---------- */
+.explain{flex:1 1 0;min-height:300px;display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.sheet.explain-closed .explain{flex:0 0 auto;min-height:0}
+.sheet.explain-closed .explain-body,.sheet.explain-closed .explain-steps{display:none}
+.explain-h{display:flex;align-items:center;gap:12px;padding:6px 12px;flex:0 0 auto}
+.explain-toggle{border:0;background:transparent;color:var(--h-xfer);font-weight:700;font-size:var(--fs-md);
+  cursor:pointer;display:flex;align-items:baseline;gap:6px;padding:4px 6px;border-radius:7px;white-space:nowrap}
+.explain-toggle:hover{background:#eef6f5}
+.explain-toggle small{color:var(--faint);font-weight:600;font-size:var(--fs-xs)}
+.explain-toggle .chev{display:inline-block;transition:transform .15s}
+.sheet.explain-closed .explain-toggle .chev{transform:rotate(-90deg)}
+.explain-steps{display:flex;gap:10px;flex:1;min-width:0;padding:2px 0;align-items:center;flex-wrap:wrap}
+/* 操作は2つに分ける: 仮の発生設備（計算の起点・赤茶）は左のメニュー、視点（カメラ・灰）は上の行。色と置き場で取り違えない */
+.ctl{display:flex;align-items:center;gap:4px;min-width:0;padding:3px 6px;border-radius:10px}
+.ctl-view{background:#f2f5f7;border:1px solid var(--line);flex:0 0 auto}
+.ctl-lead{display:flex;flex-direction:column;line-height:1.15;font-size:var(--fs-xs);font-weight:800;white-space:nowrap;margin-right:4px}
+.ctl-view .ctl-lead{color:var(--h-meta)}
+.ctl-lead small{font-weight:600;font-size:10.5px;opacity:.8}
+.v-btn{height:26px;min-width:26px;border:1px solid var(--line);background:var(--surface);color:var(--h-meta);border-radius:6px;
+  font:inherit;font-size:var(--fs-sm);font-weight:700;cursor:pointer;padding:0 8px;white-space:nowrap}
+.v-btn:hover{background:#e9eef2}
+.v-select{height:26px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit;font-size:var(--fs-sm);max-width:190px}
+.explain-body{flex:1;min-height:0;display:grid;grid-template-columns:200px minmax(0,1fr) 380px;border-top:1px solid var(--line-soft)}
+.explain-body.text-closed{grid-template-columns:200px minmax(0,1fr)}
+.explain-body.text-closed .explain-text{display:none}
+/* 左のメニュー: 転写＝仮の発生設備（計算の起点・赤茶）、ピッチ＝工程（候補ロールの数） */
+.explain-menu{overflow:auto;border-right:1px solid var(--line-soft);background:var(--surface-1);padding:8px 8px 10px;display:flex;flex-direction:column;gap:4px}
+.explain-menu .m-head{font-size:var(--fs-xs);font-weight:800;color:var(--h-meta);padding:2px 4px 4px;line-height:1.35}
+.explain-menu .m-head small{display:block;font-weight:600;color:var(--faint)}
+.explain-menu.origin .m-head{color:var(--origin)}
+.m-item{display:grid;grid-template-columns:auto 1fr auto;gap:6px;align-items:center;text-align:left;border:1px solid var(--line);
+  background:var(--surface);border-radius:8px;padding:6px 8px;font:inherit;font-size:var(--fs-sm);cursor:pointer;color:var(--ink)}
+.m-item:hover{border-color:#b9c6cf}
+.m-item .m-rank{font-size:var(--fs-xs);color:var(--faint);font-weight:700;font-variant-numeric:tabular-nums}
+.m-item .m-name{font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.m-item .m-name small{display:block;font-weight:600;font-size:10.5px;color:var(--muted)}
+.m-item .m-val{font-weight:800;font-variant-numeric:tabular-nums;font-size:var(--fs-sm)}
+.explain-menu.origin .m-item.active{background:var(--origin);border-color:var(--origin);color:var(--on-fill)}
+.explain-menu.origin .m-item.active small,.explain-menu.origin .m-item.active .m-rank{color:#f6dcd6}
+.explain-menu.origin .m-item.match .m-val{color:var(--ok)}
+.explain-menu.origin .m-item.active.match .m-val{color:#c8f0da}
+.explain-menu.pitch .m-item.active{background:var(--h-pitch);border-color:var(--h-pitch);color:var(--on-fill)}
+.explain-menu.pitch .m-item.active small,.explain-menu.pitch .m-item.active .m-rank{color:#dcefe2}
+.explain-menu .m-item.found{box-shadow:inset 3px 0 0 var(--found)}
+.explain-menu .m-note{font-size:10.5px;color:var(--faint);padding:4px 4px 0;line-height:1.5}
+.x-text-toggle{height:26px;border:1px solid var(--line);background:var(--surface);color:var(--h-meta);border-radius:6px;font:inherit;
+  font-size:var(--fs-sm);font-weight:700;cursor:pointer;padding:0 10px;white-space:nowrap}
+.x-text-toggle[aria-expanded="true"]{background:var(--h-meta);border-color:var(--h-meta);color:var(--on-fill)}
+.sheet.explain-closed .x-text-toggle{display:none}
+.explain-stage{position:relative;min-height:0;overflow:hidden;background:linear-gradient(180deg,#f7fafc,#eef3f6)}
+.explain-stage canvas{display:block}
+.explain-stage .x-empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:var(--fs-md);text-align:center;padding:20px}
+.explain-text{overflow:auto;padding:10px 14px 12px;border-left:1px solid var(--line-soft);font-size:var(--fs-sm);line-height:1.55}
+.explain-text h3{margin:0 0 2px;font-size:var(--fs-lg)}
+.explain-text .sub{color:var(--muted);font-size:var(--fs-xs);margin-bottom:6px}
+.explain-text ol{margin:0;padding-left:20px}
+.explain-text li{margin:3px 0}
+.explain-text li::marker{color:var(--faint);font-weight:700}
+.explain-text .v{font-weight:800;font-variant-numeric:tabular-nums;color:var(--ink)}
+.explain-text .f{color:var(--muted);font-size:var(--fs-xs)}
+.explain-text .verdict{margin-top:6px;padding:6px 10px;border-radius:8px;background:var(--ro-bg);font-weight:700}
+.explain-text .verdict.ok{background:var(--ok-bg);color:var(--ok)}
+/* 3D の文字札（CSS2D）: 色は面と同じ意味 */
+.x-label{font:700 12px/1.3 "Yu Gothic UI","Meiryo UI",sans-serif;padding:2px 7px;border-radius:6px;white-space:nowrap;
+  background:rgba(255,255,255,.92);color:var(--ink);box-shadow:0 1px 3px rgba(20,40,55,.18);pointer-events:none}
+.x-label.red{color:var(--on-fill);background:var(--found)}
+.x-label.off{background:var(--warn-soft);color:var(--warn-ink)}
+.x-label.edge{background:#e8eef9;color:#34507a}
+.x-label.past{opacity:.85;font-weight:600;border:1px dashed currentColor;background:var(--surface)}   /* 前工程までのオフの札 */
+.x-label.muted{background:transparent;box-shadow:none;color:var(--muted);font-weight:600}
+.x-label.title{font-size:13px;border:1px solid var(--line);color:var(--h-meta)}
+.x-label.title.found{color:var(--found);border-color:rgba(192,57,43,.45)}
+.x-label.title.active{background:var(--h-xfer);border-color:var(--h-xfer);color:var(--on-fill);font-size:14px}
+.x-label.title.found.active{background:var(--found);border-color:var(--found)}
+.x-label.title.origin{color:var(--origin);border-color:var(--found);border-width:2px}
+.x-label.title.origin.active{background:var(--origin);border-color:var(--origin);color:var(--on-fill)}
+.x-label.title.before{color:var(--faint);border-style:dashed}
+.x-label.pair{font-size:12.5px}
+.x-label.side{font-size:11.5px;color:var(--h-xfer);border:1px solid var(--h-xfer);font-weight:800}   /* ピッチの板の入側・出側 */
+.x-label.flow{background:#e6f2f1;color:var(--h-xfer);font-weight:600;font-size:11px}
+/* 凡例: 形と色の意味を先に示す（読む前に分かる） */
+.x-legend{position:absolute;left:10px;bottom:8px;right:10px;padding:5px 10px;border-radius:8px;background:rgba(255,255,255,.82);display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;
+  font-size:var(--fs-xs);color:var(--muted);pointer-events:none}
+.x-legend span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.x-legend .lg-dot{width:9px;height:9px;border-radius:50%;background:var(--x-defect);display:inline-block}
+.x-legend .lg-arrow{color:var(--danger);font-style:normal;font-weight:800}
+.x-legend .lg-sw{width:14px;height:9px;border-radius:2px;display:inline-block}
+.x-legend .lg-sw.lg-off{border:1px dashed;box-sizing:border-box}   /* オフの見本（3D と同じ点線の輪郭） */
+.x-legend .lg-sw.lg-divider{width:3px;height:12px;background:var(--h-xfer)}   /* ピッチの板の入側｜出側の仕切り */
+.x-legend .lg-flow{color:var(--h-xfer);font-style:normal;font-weight:800}
+.x-legend .lg-dash{color:var(--x-defect);font-style:normal;font-weight:800}
+.x-legend .lg-note{color:var(--faint)}
+.x-legend .lg-line{display:inline-block;width:3px;height:12px;background:var(--x-defect);margin-right:-2px}
+/* 下流での広がり（説明文の表） */
+.x-spread{border-collapse:collapse;margin:4px 0 2px;font-size:var(--fs-xs);font-variant-numeric:tabular-nums;width:100%}
+.x-spread th{color:var(--muted);font-weight:600;text-align:right;padding:2px 6px;border-bottom:1px solid var(--line)}
+.x-spread th:first-child,.x-spread td:first-child{text-align:left}
+.x-spread td{text-align:right;padding:2px 6px;border-bottom:1px solid var(--line-soft)}
+.x-spread tr.origin td{color:var(--origin);font-weight:800}
+.x-spread tr.found td{color:var(--found);font-weight:800}
+/* 横幅いっぱいに広げる（列の最小幅の合計は JS が min-width に入れる） */
+table.ws{border-collapse:separate;border-spacing:0;font-size:13.5px;table-layout:fixed;width:100%}
+table.ws th,table.ws td{border-bottom:1px solid var(--line-soft);
+  padding:0 8px;text-align:right;font-variant-numeric:tabular-nums;height:var(--row);overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+/* 見出し: 淡い地＋まとまりの色帯（塗りつぶしの見出しより静かで、色の意味は残す） */
+table.ws thead th{position:sticky;top:0;z-index:5;background:#f7f9fb;color:var(--ink);text-align:center;font-weight:700;
+  line-height:1.15;white-space:normal;vertical-align:bottom;padding:7px 4px 6px;height:auto;
+  border-top:3px solid var(--hc);border-bottom:1px solid var(--line)}
+.th-name{display:block;font-size:var(--fs-sm)}
+.th-unit{display:block;font-size:10.5px;color:var(--faint);font-weight:600;margin-top:1px}
+.hc-input{--hc:var(--h-input)}
+.hc-xfer{--hc:var(--h-xfer)}
+.hc-pitch{--hc:var(--h-pitch)}
+.hc-meta{--hc:var(--h-meta)}
+/* まとまりの境にだけ淡い縦線（JS が境の列に .g-start を付ける） */
+table.ws .g-start{box-shadow:inset 1px 0 0 var(--line)}
+table.ws .c-eq + .g-start{box-shadow:none}
+
+/* No.・設備は横スクロールしても残す */
+table.ws th.sticky-l,table.ws td.sticky-l{position:sticky;z-index:4}
+table.ws thead th.sticky-l{z-index:7}
+th.c-no,td.c-no{left:0;text-align:center}
+th.c-eq,td.c-eq{left:var(--eq-left,40px);text-align:left;box-shadow:1px 0 0 var(--line)}
+td.c-no{background:var(--surface);color:var(--faint);font-weight:600}
+td.c-eq{background:var(--edit-bg)}
+
+/* body cells */
+tbody td{background:var(--surface)}
+tbody tr:hover td,tbody tr:hover td.sticky-l{background-image:linear-gradient(rgba(47,125,120,.07),rgba(47,125,120,.07))}
+
+/* 入力できるセル: 暖色の面。入力欄の枠はホバー／フォーカスでだけ見せる */
+tbody td.edit{background:var(--edit-bg);padding:0 2px}
+td.edit input,td.edit select,td.c-eq input{width:100%;height:calc(var(--row) - 6px);border:1px solid transparent;background:transparent;
+  text-align:right;font-size:13.5px;padding:0 6px;color:var(--ink);border-radius:6px;font-variant-numeric:tabular-nums}
+td.edit select{text-align:left;cursor:pointer}
+td.edit input[type=text]{padding:0 4px}
+td.c-eq input{text-align:left;font-weight:700;padding:0 6px}
+td.edit input:hover,td.edit select:hover,td.c-eq input:hover{border-color:var(--edit-line)}
+td.edit input:focus,td.edit select:focus,td.c-eq input:focus{outline:none;border-color:var(--edit-focus);
+  background:var(--edit-field);box-shadow:0 0 0 2px var(--focus-ring)}
+td.c-eq{padding:0 2px}
+
+/* 自動計算のセル: 寒色の淡いグレーで“触れない”表現 */
+tbody td.calc{background:var(--ro-bg);color:var(--ro-ink)}
+tbody td.calc.dim{color:#aab5bd}
+
+/* badges */
+.badge{display:inline-block;border-radius:999px;padding:1px 9px;font-weight:700;font-size:var(--fs-xs);line-height:17px;white-space:nowrap}
+.badge.ok{background:var(--ok-bg);color:var(--ok)}
+.badge.no{background:#e9edf0;color:var(--muted)}
+.badge.na{background:#e4e9ed;color:var(--muted)}
+.ht{font-weight:700}.ht-h{color:var(--h-input)}.ht-t{color:var(--h-pitch)}
+
+/* found / match rows */
+tr.row-found td{background-image:linear-gradient(rgba(192,57,43,.08),rgba(192,57,43,.08))}
+tr.row-found td.c-no{color:var(--found);font-weight:800;box-shadow:inset 4px 0 0 var(--found)}
+tr.row-found td.c-eq input{color:var(--found);font-weight:800}
+/* 一致: 行全体を緑の面で。No. に緑の帯、転写距離・一致率を太字（発見設備の赤と並んでも区別できる濃さ） */
+tr.row-match td,tr.row-match td.sticky-l{background-image:linear-gradient(rgba(31,122,77,.2),rgba(31,122,77,.2))}
+tr.row-match td{border-bottom-color:rgba(31,122,77,.25)}
+tr.row-match td.c-no{color:var(--ok);font-weight:800;box-shadow:inset 4px 0 0 var(--ok)}
+tr.row-match td.c-eq input{color:var(--ok);font-weight:800}
+tr.row-match td[id$="-transfer_distance_m"],tr.row-match td[id$="-agreement_percent"]{color:#0f5c37;font-weight:800}
+tr.row-match .badge.ok{background:var(--ok);color:var(--on-fill)}
+
+/* 最終設備（KEN）以降の折りたたみ */
+tr.fold-row td{height:auto;padding:0;background:var(--surface);border-bottom:1px solid var(--line)}
+.fold-btn{width:100%;border:0;background:transparent;color:var(--muted);font-size:var(--fs-xs);font-weight:600;
+  padding:5px 12px;text-align:left;cursor:pointer}
+.fold-btn:hover{background:var(--surface-4);color:var(--ink)}
+
+/* candidates(複数チップを折り返すため nowrap 既定を上書き) */
+table.ws td.cands{text-align:left;white-space:normal;overflow:visible;height:auto;min-height:var(--row)}
+.chip{display:inline-block;background:#e9f2f5;color:#1c4a5e;border:1px solid #bcd7de;border-radius:6px;
+  padding:0 7px;margin:1px 2px;font-size:var(--fs-xs)}
+.na-text{color:var(--faint)}
+
+.hidden{display:none!important}
+.error{position:fixed;right:18px;bottom:18px;max-width:540px;background:#fff1f1;color:#b23b3b;font-size:var(--fs-md);
+  border:1px solid #e2b9b9;border-radius:10px;padding:12px 16px;box-shadow:var(--shadow);z-index:1300}   /* いちばん前: マスタ管理・編集フォーム・問い合わせのモーダルの上 */
+
+/* 総オフ後の自動値（エンドバック）: 入力欄に入るが、手で入れた値と見分けられるよう青緑の斜体＋「自動」の印 */
+td.edit input.auto,td.edit select.auto{color:var(--h-xfer);font-style:italic;font-weight:700;background:#eef7f6}
+td.edit.has-auto{position:relative}
+td.edit.has-auto::after{content:"自動";position:absolute;top:0;right:3px;font-size:9px;line-height:1;font-weight:800;color:var(--h-xfer);pointer-events:none}
+.x-label.cand-list{background:rgba(255,255,255,.95);color:var(--h-pitch);font-weight:600;white-space:normal;max-width:520px;text-align:center}
+
+/* ---------- 版・自分の権限・切断（WaveLog から移した管理） ---------- */
+.ver-badge{margin-left:8px;border:1px solid rgba(255,255,255,.35);background:var(--on-dark-fill);color:#dfe9f2;border-radius:4px;
+  font:700 10px/1 "Segoe UI",sans-serif;letter-spacing:.06em;padding:2px 6px;cursor:pointer;vertical-align:1px}
+.ver-badge:hover{background:var(--on-dark-hover)}
+.ver-new{margin-left:4px;border:0;background:var(--accent);color:var(--accent-ink);border-radius:4px;font:700 10px/1 "Segoe UI","Yu Gothic UI",sans-serif;
+  padding:3px 6px;cursor:pointer;vertical-align:1px}
+.ver-new.is-ready{background:var(--ok);color:#fff}
+.me-chip{background:var(--on-dark-fill);color:var(--on-fill);cursor:pointer;font-family:inherit}
+.me-chip:hover{background:rgba(255,255,255,.18)}
+.me-chip.role-dev{border-color:#b9a4ff}
+.me-chip.role-maint{border-color:#8fd3c9}
+.me-chip.role-op{border-color:#ffd58a}
+.me-pop{position:fixed;top:calc(var(--header-h) - 4px);right:120px;z-index:80;width:320px;background:var(--surface);border:1px solid var(--line);
+  border-radius:10px;box-shadow:var(--shadow);padding:12px 14px;font-size:var(--fs-sm);color:var(--ink)}
+.me-pop dl{display:grid;grid-template-columns:7em 1fr;gap:5px 10px;margin:0}
+.me-pop dt{color:var(--muted)}
+.me-pop dd{margin:0;font-weight:700;word-break:break-all}
+.me-pop dd small{font-weight:400;color:var(--muted)}
+.me-pop .me-note{margin-top:10px;color:var(--muted);font-size:var(--fs-xs);line-height:1.5}
+.revoked-bar{position:sticky;top:0;z-index:40;padding:8px 18px;background:var(--danger-bg);color:#8f2a1d;border-bottom:1px solid var(--danger-line);font-size:var(--fs-sm);font-weight:700}
+.cl-card{width:min(640px,94vw)}
+.cl-sub{padding:10px 18px 0;color:var(--muted);font-size:var(--fs-sm);line-height:1.6}
+.cl-sub b{color:var(--warn-ink)}
+.cl-sub b.cl-ver{color:var(--ink)}
+/* この PC に入れる: 良いことを 3 つ → 作るものの場所（小さく）→ 右下に次にすること（主ボタンは右端・目の終点） */
+.sc-card{width:min(600px,94vw)}
+.sc-body{padding:14px 18px 4px;font-size:var(--fs-sm);line-height:1.7;color:var(--ink)}
+.sc-body ul{margin:8px 0 10px;padding-left:20px}
+.sc-body li b{color:var(--ok)}
+.sc-where{margin-top:6px;padding:8px 10px;border-radius:8px;background:var(--input-soft);color:var(--muted);font-size:var(--fs-xs);overflow-wrap:anywhere}
+.sc-where code{font-size:var(--fs-xs)}
+.sc-msg{margin-top:8px;padding:8px 10px;border-radius:8px}
+.sc-msg.ok{background:var(--ok-bg);color:var(--ok)}
+.sc-msg.ng{background:var(--danger-bg);color:#8f2a1d}
+.sc-acts{display:flex;gap:8px;justify-content:flex-end;padding:12px 18px 16px}
+.sc-acts .sc-never{margin-right:auto;border-color:transparent;color:var(--muted)}
+.cl-update .cl-update-row{display:flex;gap:12px;align-items:center}
+.cl-update .cl-update-row + .cl-update-row{margin-top:8px;padding-top:8px;border-top:1px solid var(--line-soft)}
+/* 版のこと（取り込んだ新しい版・取り込めない理由）。次にすることのボタンを右に置き、目を文→ボタンの順に運ぶ */
+.cl-update{margin:10px 18px 0;padding:10px 12px;border-radius:8px;border:1px solid var(--line);
+  font-size:var(--fs-sm);line-height:1.6}
+.cl-update-text{flex:1;min-width:0;overflow-wrap:anywhere}
+.cl-update code{font-size:var(--fs-xs)}
+.cl-update .btn-primary{flex:none;white-space:nowrap}
+.cl-update.tone-ready{background:var(--ok-bg);border-color:color-mix(in srgb,var(--ok) 35%,transparent)}
+.cl-update.tone-warn{background:var(--warn-soft);border-color:color-mix(in srgb,var(--warn-ink) 30%,transparent)}
+.cl-update.tone-warn b{color:var(--warn-ink)}
+.cl-update.tone-info{background:var(--input-soft);border-color:var(--line-soft);color:var(--muted)}
+.cl-body{padding:8px 18px 18px;overflow:auto}
+.cl-entry{padding:10px 0;border-bottom:1px solid var(--line-soft)}
+.cl-entry h4{margin:0 0 6px;font-size:var(--fs-md)}
+.cl-entry h4 small{margin-left:8px;color:var(--muted);font-weight:400}
+.cl-entry h4 .cl-now{margin-left:8px;font-size:11px;background:var(--input-soft);color:var(--h-input);border-radius:9px;padding:1px 7px}
+.cl-entry ul{margin:0;padding-left:18px;line-height:1.7;font-size:var(--fs-sm)}

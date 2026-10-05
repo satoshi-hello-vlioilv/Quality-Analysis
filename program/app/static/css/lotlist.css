@@ -1,0 +1,234 @@
+/* =========================================================================
+   ロット一覧（品質データ）＋ 絞り込みのバー
+   - 絞り込みのバーは WaveLog の汎用フィルタ（45-tolerance.css）と同じ部品・同じ並び:
+     「文字で探す → プリセット → 条件 → 列で絞り込む」（決める順＝読む順）。
+   - 色はこのアプリのトークンを使う: 青緑（--h-xfer）＝絞り込みが効いている、
+     アンバー＝注意（一部外し中・固定・共有に届かない）、藍（--h-input）＝押せる主操作。
+   - ロット番号はボタンの顔（下線＋藍）にして「押すと検索する」ことを形で示す（アフォーダンス）。
+   ========================================================================= */
+.ll-screen{--ll-h:30px;--ll-fs:13.5px;
+  height:calc(100vh - var(--header-h));padding:var(--gap);display:flex;min-height:0}
+.ll-panel{position:relative;flex:1;min-width:0;background:var(--surface);border-radius:var(--radius);display:flex;flex-direction:column;
+  box-shadow:var(--shadow-sm);overflow:hidden}
+.ll-head{display:flex;align-items:center;gap:12px;padding:10px 16px 2px;flex:0 0 auto}
+.ll-title{flex:1;min-width:0}
+.ll-title h2{margin:0;font-size:var(--fs-xl);color:var(--ink);display:flex;align-items:center;gap:8px}
+.ll-title h2::before{content:"";width:4px;height:17px;border-radius:2px;background:var(--h-xfer)}
+.ll-title p{margin:3px 0 0;font-size:12.5px;color:var(--muted)}
+.ll-title p b{color:var(--h-input)}
+.ll-table{height:30px;border-radius:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:0 8px;font-size:13px;font-family:inherit}
+.ll-fresh{height:30px;max-width:520px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-radius:999px;padding:0 14px;cursor:pointer;
+  border:1px solid var(--line);background:var(--surface-3);color:var(--ink);font-size:12.5px;font-weight:700;font-family:inherit}
+.ll-fresh:hover{background:#e8eef2}
+.ll-fresh.is-new{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.ll-fresh.is-warn{background:var(--danger-bg);border-color:var(--danger-line);color:var(--danger)}
+.ll-fresh:disabled{cursor:progress;opacity:.8}
+
+/* ---------- 絞り込みのバー（WaveLog と同じ部品） ---------- */
+.ll-screen .generic-filter-bar{margin:10px 16px 0;border:1px solid var(--line);border-radius:8px;background:var(--surface);flex:0 0 auto}
+.ll-screen .filter-search-row{position:relative;display:flex;align-items:center;gap:8px;min-height:44px;padding:7px 10px;background:#edf6f5;border-radius:8px}
+.ll-screen .generic-filter-bar button,.ll-screen .generic-filter-bar select,.ll-screen .generic-filter-bar input{font-family:inherit;font-size:var(--ll-fs)}
+.ll-screen .generic-filter-bar button{height:var(--ll-h);border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink);cursor:pointer;padding:0 11px}
+.ll-screen .generic-filter-bar button:disabled{opacity:.5;cursor:default}
+.ll-screen .generic-filter-bar select,.ll-screen .generic-filter-bar input{height:var(--ll-h);border:1px solid var(--edit-line);border-radius:7px;background:var(--edit-field);padding:0 8px;color:var(--ink)}
+.ll-screen .generic-filter-bar input:focus,.ll-screen .generic-filter-bar select:focus{outline:none;border-color:var(--edit-focus);box-shadow:0 0 0 3px var(--focus-ring)}
+.lt-search{flex:0 1 300px;min-width:180px;position:relative;display:flex;align-items:center}
+.lt-search svg{position:absolute;left:9px;width:15px;height:15px;fill:none;stroke:var(--muted);stroke-width:1.8;pointer-events:none}
+.lt-search input{width:100%;padding-left:30px!important}
+.fb-preset-btn,.fb-cond-btn{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;font-weight:700;white-space:nowrap}
+.fb-preset-btn .fb-preset-key,.fb-cond-btn .fb-cond-key{color:var(--muted);font-weight:700}
+.fb-preset-btn b{max-width:200px;overflow:hidden;text-overflow:ellipsis;font-weight:800}
+.fb-preset-btn em{font-style:normal;color:var(--ll-warn);font-weight:700}
+.fb-preset-btn:hover,.fb-cond-btn:hover{border-color:var(--ll-teal)}
+.fb-preset-btn.is-on,.fb-cond-btn.is-on,.fb-preset-btn[aria-expanded="true"],.fb-cond-btn[aria-expanded="true"]{border-color:var(--ll-teal);background:var(--ll-pale)}
+.fb-preset-btn.is-partial{border-color:var(--ll-warn);background:var(--ll-warn-bg)}
+.hd-caret{font-style:normal;color:var(--muted);font-size:11px}
+.fb-cond-icon{width:14px;height:14px;fill:currentColor}
+.fb-cond-n{display:inline-grid;place-items:center;min-width:1.6em;height:1.5em;padding:0 .4em;border-radius:999px;background:#e6ebef;color:var(--muted);font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+.fb-cond-btn.is-on .fb-cond-n{background:var(--ll-teal);color:var(--on-fill)}
+.filter-adhoc-toggle{max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.filter-adhoc-toggle.active{background:var(--ll-pale)!important;border-color:var(--ll-teal)!important;color:var(--ll-teal-dark)!important;font-weight:700}
+
+/* 条件を検索して足す */
+.filter-token-input{position:relative;flex:0 1 380px;min-width:0;display:flex;align-items:center;gap:6px;height:var(--ll-h);padding:0 8px;border:1px solid var(--ll-teal);border-radius:7px;background:var(--surface)}
+.filter-token-key{color:var(--ll-teal-dark);font-weight:800;font-size:12.5px;white-space:nowrap}
+.ll-screen .filter-token-input input{flex:1;border:0;background:transparent;box-shadow:none;padding:0 2px;height:26px}
+.ll-screen .filter-token-input input:focus{box-shadow:none}
+.filter-suggest{position:absolute;top:calc(100% + 6px);left:0;width:min(520px,80vw);max-height:340px;overflow:auto;background:var(--surface);border:1px solid #9fc3c8;border-radius:9px;box-shadow:0 16px 42px #0b2b3322;padding:6px;z-index:5}
+.fs-sec{margin:6px 6px 3px;color:var(--muted);font-size:12px;font-weight:800}
+.ll-screen .fs-item{display:block;width:100%;height:auto!important;text-align:left;border:0!important;background:transparent!important;padding:5px 8px!important;border-radius:6px!important;font-weight:600}
+.ll-screen .fs-item.is-active,.ll-screen .fs-item:hover{background:var(--ll-pale)!important;color:var(--ll-teal-dark)}
+.fs-empty{margin:8px;color:var(--muted);font-size:12.5px}
+
+/* 条件の面・プリセットの面（ポップオーバー） */
+.fb-cond-menu,.fb-preset-menu{position:fixed;z-index:60;background:var(--surface);border:1px solid var(--pop-line);border-radius:10px;box-shadow:0 18px 44px var(--pop-shadow);
+  padding:10px;min-width:380px;max-width:min(92vw,720px);max-height:70vh;overflow:auto;font-size:13px}
+.fb-cond-head,.fb-preset-head{margin:0 0 8px;color:var(--ink);font-weight:800}
+.fb-cond-head small,.fb-preset-head small{display:block;font-weight:400;color:var(--muted)}
+.fb-cond-row{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:7px}
+.fb-cond-row:hover{background:var(--surface-3)}
+.fb-cond-row.is-locked{background:var(--ll-warn-bg)}
+.fb-cond-badge{flex:0 0 auto;padding:1px 7px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--muted);font-weight:800;font-size:12px;white-space:nowrap}
+.fb-cond-badge.is-lock{border-color:var(--ll-warn);color:var(--amber-ink)}
+.fb-cond-text{flex:1;min-width:0;overflow-wrap:anywhere}
+.fb-cond-text b{color:var(--ll-teal-dark);font-weight:800}
+.fb-cond-text em{font-style:normal;color:var(--ink)}
+.fb-cond-menu .fb-cond-save,.fb-cond-menu .fb-cond-x{flex:0 0 auto;width:26px;height:26px;padding:0;display:grid;place-items:center;border:1px solid var(--line);border-radius:6px;background:var(--surface);cursor:pointer;font-size:13px}
+.fb-cond-menu .fb-cond-save{color:var(--ll-warn)}
+.fb-cond-menu .fb-cond-save.is-saved{cursor:default}
+.fb-cond-menu .fb-cond-x{color:var(--danger)}
+.fb-cond-menu .fb-cond-x:hover{background:var(--danger-bg)}
+.fb-cond-acts{display:flex;flex-direction:column;gap:2px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line-soft)}
+.fb-cond-acts button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;border:0;background:transparent;border-radius:7px;padding:6px 10px;text-align:left;cursor:pointer;font-weight:700;color:var(--ink);font-family:inherit;font-size:13px}
+.fb-cond-acts button small{font-weight:400;color:var(--muted);font-size:12px}
+.fb-cond-acts button:disabled{opacity:.5;cursor:default}
+.fb-preset-sec{margin:8px 0 4px;color:var(--muted);font-weight:800;letter-spacing:.04em}
+.fb-preset-pick{display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 8px;width:100%;padding:5px 8px;border:0;border-radius:7px;background:transparent;text-align:left;cursor:pointer;font-family:inherit;font-size:13px;font-weight:800;color:var(--ink)}
+.fb-preset-pick:hover{background:var(--surface-3)}
+.fb-preset-pick.is-current{background:var(--ll-pale)}
+.fb-preset-mark{grid-row:1/span 2;align-self:center;width:12px;height:12px;border-radius:50%;border:2px solid #9aabb6;background:var(--surface)}
+.fb-preset-pick.is-current .fb-preset-mark{border-color:var(--ll-teal);box-shadow:inset 0 0 0 2px #fff,inset 0 0 0 12px var(--ll-teal)}
+.fb-preset-label{grid-column:2;overflow-wrap:anywhere}
+.fb-preset-sub{grid-column:2;font-weight:400;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fb-preset-empty{margin:8px;color:var(--muted)}
+.fb-preset-foot{margin-top:8px;padding-top:8px;border-top:1px solid var(--line-soft)}
+.fb-preset-foot button{width:100%;height:30px;border:1px solid var(--ll-teal);border-radius:7px;background:var(--surface);color:var(--ll-teal-dark);font-weight:700;cursor:pointer;font-family:inherit}
+.fb-preset-foot small{display:block;margin-top:4px;color:var(--muted);font-size:12px}
+
+/* 列で絞り込む（その場だけ） */
+.filter-adhoc-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:7px 10px;background:#f2f8f7;border-top:1px solid #d8e6e4}
+.filter-adhoc-col{flex:0 0 auto;max-width:240px}
+.filter-adhoc-op{flex:0 0 auto;max-width:150px}
+.ll-screen .filter-adhoc-row input.filter-adhoc-value{flex:1 1 220px;min-width:150px}
+#llAdhocKeep{color:var(--ll-teal-dark);border-color:var(--ll-teal);font-weight:700}
+.filter-adhoc-state{flex:1 1 0;min-width:0;font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.filter-adhoc-state.is-on{color:var(--ll-teal-dark);font-weight:800}
+.filter-adhoc-state.is-warn{color:var(--danger);font-weight:800}
+.ll-screen .fb-close{flex:0 0 auto;height:26px;padding:0 9px;white-space:nowrap;color:var(--muted);font-weight:700}
+.ll-screen .fb-close:hover{border-color:var(--ll-teal);color:var(--ink)}
+
+/* 条件を作る */
+.filter-body{padding:8px 10px;display:grid;gap:6px;border-top:1px solid #d8e6e4}
+.filter-body-head{display:flex;align-items:center;justify-content:space-between}
+.filter-builder{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px}
+.filter-builder label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);font-weight:700}
+.filter-builder label input{width:240px}
+.filter-builder-actions{display:flex;gap:6px}
+.filter-builder-actions #llAddFilter{background:var(--h-input);color:var(--on-fill);border-color:var(--h-input);font-weight:700}
+.filter-builder-actions #llRegisterFilter{color:var(--ll-warn);border-color:var(--ll-warn);font-weight:700}
+.filter-builder-note{margin:0;font-size:12.5px;color:var(--muted)}
+
+/* ---------- 件数・ページ ---------- */
+.ll-status{display:flex;align-items:center;gap:14px;padding:8px 18px 6px;flex:0 0 auto}
+.ll-count{font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums}
+.ll-pager{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.ll-pager button{height:28px;min-width:32px;border:1px solid var(--line);border-radius:6px;background:var(--surface);cursor:pointer;color:var(--h-input)}
+.ll-pager button:disabled{opacity:.4;cursor:default}
+
+/* ---------- 一覧 ---------- */
+.ll-grid-wrap{position:relative;flex:1;min-height:0;overflow:auto;margin:0 16px 14px;border:1px solid var(--line);border-radius:8px}
+.ll-screen.is-loading .ll-grid-wrap{opacity:.55;transition:opacity .15s .15s}
+/* 幅・行の高さの決まりは lotlist-columns.css（後から読む）にある */
+table.ll-grid{border-collapse:separate;border-spacing:0;font-size:13.5px}
+.ll-grid th,.ll-grid td{padding:0 10px;border-bottom:1px solid var(--line-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}
+.ll-grid thead th{position:sticky;top:0;z-index:2;background:var(--h-meta);color:var(--on-fill);font-weight:700;font-size:13px;cursor:pointer;user-select:none}
+.ll-grid thead th:hover{background:#3b4a57}
+.ll-grid thead th.col-filtered{background:var(--ll-teal)}
+.ll-sort{font-style:normal;margin-left:4px;color:#ffe3a6;font-size:11px}
+.col-filter-badge{font-style:normal;margin-left:4px;font-size:10px;color:#d8fff8}
+.ll-grid tbody tr:nth-child(even) td{background:#fafcfd}
+.ll-grid tbody tr:hover td{background:#eef6f8}
+.ll-grid tbody tr.is-current td{background:var(--amber-pale)}
+/* ロット番号: 左に固定し、押せる顔（藍＋下線） */
+.ll-grid .ll-lotcol{position:sticky;left:0;z-index:1;background:var(--surface);box-shadow:1px 0 0 var(--line)}
+.ll-grid thead .ll-lotcol{z-index:3;background:var(--h-input)}
+.ll-grid tbody tr:nth-child(even) td.ll-lotcol{background:#fafcfd}
+.ll-lot{border:0;background:transparent;padding:0;cursor:pointer;font-family:inherit;font-size:14px;font-weight:800;letter-spacing:.02em;
+  color:var(--h-input);text-decoration:underline;text-decoration-color:rgba(63,101,145,.35);text-underline-offset:3px}
+.ll-lot:hover,.ll-lot:focus-visible{color:#1f3f66;text-decoration-color:currentColor;outline:none}
+.ll-lot:focus-visible{box-shadow:0 0 0 3px rgba(230,165,46,.35);border-radius:3px}
+.ll-note{position:sticky;left:0;margin:18px;padding:16px 18px;border-radius:9px;background:#fff6e6;color:var(--amber-ink);font-size:13.5px;line-height:1.6;max-width:880px}
+.ll-note small{color:var(--muted)}
+.ll-note-acts{margin-top:10px}
+
+/* ---------- 登録した条件とプリセット ---------- */
+.ll-pm{position:absolute;inset:0;background:rgba(15,30,45,.35);display:flex;align-items:center;justify-content:center;z-index:8}
+.ll-pm-card{background:var(--surface);border-radius:11px;width:min(960px,92%);max-height:80%;display:flex;flex-direction:column;box-shadow:0 22px 60px rgba(12,34,48,.3)}
+.ll-pm-head{display:flex;align-items:baseline;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.ll-pm-head b{font-size:16px;white-space:nowrap}
+.ll-pm-head small{flex:1;color:var(--muted);font-size:12.5px}
+.ll-pm-head .fb-close{height:28px;border:1px solid var(--line);border-radius:7px;background:var(--surface);cursor:pointer;font-family:inherit}
+.ll-pm-body{overflow:auto;padding:6px 16px 14px}
+.ll-pm-table{width:100%;border-collapse:collapse;font-size:13.5px}
+.ll-pm-table th{text-align:left;color:var(--muted);font-size:12px;padding:6px 8px;border-bottom:1px solid var(--line)}
+.ll-pm-table td{padding:6px 8px;border-bottom:1px solid var(--line-soft)}
+.ll-pm-table td.c{text-align:center;white-space:nowrap}
+.ll-pm-cond{font-weight:700;overflow-wrap:anywhere}
+.ll-pm-group{width:100%;height:28px;border:1px solid var(--edit-line);border-radius:6px;background:var(--edit-field);padding:0 8px;font-family:inherit;font-size:13px}
+.ll-pm-always{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;cursor:pointer}
+.ll-pm-empty{color:var(--muted);padding:18px 8px!important}
+
+
+/* 「条件」の面はバーの中にあるので、バーのボタンの決まり（高さ・枠）より面の決まりを強くする */
+.ll-screen .generic-filter-bar .fb-cond-acts button{height:auto;border:0;background:transparent;padding:6px 10px;border-radius:7px}
+.ll-screen .generic-filter-bar .fb-cond-acts button:hover:not(:disabled){background:var(--ll-pale)}
+.ll-screen .generic-filter-bar .fb-cond-acts .fb-cond-clear{border-top:1px solid var(--line-soft);border-radius:0 0 7px 7px}
+.ll-screen .generic-filter-bar .fb-cond-acts .fb-cond-clear:hover:not(:disabled){background:var(--danger-bg);color:var(--danger)}
+.ll-screen .generic-filter-bar .fb-cond-menu .fb-cond-save,.ll-screen .generic-filter-bar .fb-cond-menu .fb-cond-x{height:26px;width:26px;padding:0}
+
+/* ---------- 画面の切り替え（ヘッダーのタブ） ----------
+   いまいる画面は白い面で「手前」に見せ（図と地）、もう一方は暗い地に沈める。
+   計算のタブには、いま取り込んでいるロット番号を添える（戻ったときに思い出させない）。 */
+.screen-tabs{display:flex;align-items:flex-end;gap:4px;align-self:flex-end;margin:0 auto 0 28px;height:100%}
+.screen-tab{display:flex;align-items:center;gap:7px;height:40px;padding:0 18px;border:0;border-radius:9px 9px 0 0;cursor:pointer;
+  background:var(--on-dark-fill);color:rgba(255,255,255,.82);font-family:inherit;font-size:var(--fs-md);font-weight:700;white-space:nowrap}
+.screen-tab:hover{background:rgba(255,255,255,.18);color:var(--on-fill)}
+.screen-tab[aria-selected="true"]{background:var(--bg);color:var(--ink)}
+.screen-tab svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round}
+.screen-tab small{font-size:var(--fs-sm);font-weight:800;letter-spacing:.03em;padding:1px 7px;border-radius:999px;background:rgba(255,255,255,.18)}
+.screen-tab small:empty{display:none}
+.screen-tab[aria-selected="true"] small{background:#e7eef5;color:var(--h-input)}
+.screen-tab:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
+/* 「以内」の条件は、今日を基準に毎日動くことを添える */
+.fb-cond-text em.fb-cond-rel{margin-left:6px;font-size:11.5px;color:var(--muted);padding:0 6px;border-radius:999px;background:#eef3f6}
+
+/* 0件のときの「以内」の理由 */
+.ll-datehints{margin:8px 0 4px;padding-left:18px;line-height:1.7}
+.ll-datehints small{color:var(--muted)}
+
+/* 元データが古いときの帯（アンバー＝注意。何が起きていそうか・次にすること・取り直すボタン） */
+.ll-stale{margin:8px 16px 0;padding:9px 14px;border-radius:8px;background:var(--amber-pale);border:1px solid var(--amber-line);color:var(--amber-ink);font-size:13.5px;line-height:1.6;flex:0 0 auto}
+.ll-stale small{display:block;color:#8a6a2f}
+.ll-stale button{margin-top:6px;height:28px;border:1px solid #c98a12;border-radius:7px;background:var(--surface);color:var(--amber-ink);font-weight:700;cursor:pointer;font-family:inherit}
+.ll-stale button:hover{background:#ffe9b8}
+
+/* ---------- ロット番号でまとめる ----------
+   ロットの見出し行は藍の淡い面（ロット番号＝押せる藍と同じ色相）。中の行はロット番号の列の左に細い藍の線を引いて
+   「この見出しの下」を示し（Gestalt の連結）、ロットごとに帯を交互にする（行ごとの縞は使わない）。
+   ロットの中で同じ値は見出しに出し、違う列は「n通り」と淡く書く（畳んでも共通の値は読める）。 */
+.ll-grid.is-grouped tbody tr:nth-child(n) td,.ll-grid.is-grouped tbody tr:nth-child(n) td.ll-lotcol{background:var(--surface)}
+.ll-grid.is-grouped tbody tr.g-alt:nth-child(n) td{background:var(--surface-2)}
+.ll-grid.is-grouped tbody tr.ll-ghead:nth-child(n) td{background:var(--input-soft);border-top:1px solid #c9d8e8;font-weight:700;color:var(--ro-ink);cursor:pointer}
+.ll-grid.is-grouped tbody tr.ll-ghead:hover td{background:#d9e5f1}
+.ll-grid.is-grouped tbody tr:hover:nth-child(n):not(.ll-ghead) td{background:#eef6f8}
+.ll-grid.is-grouped tbody tr.is-current:nth-child(n) td{background:var(--amber-pale)}
+.ll-grid tr.ll-ghead td.ll-lotcol{box-shadow:inset 3px 0 0 var(--h-input),1px 0 0 var(--line)}
+.ll-grid tr.g-child td.ll-lotcol{padding-left:30px;box-shadow:inset 3px 0 0 #a9bfd6,1px 0 0 var(--line)}
+.ll-grid tr.g-last td{border-bottom-color:#c9d8e8}
+.ll-grid.is-grouped tbody tr.ll-ghead:nth-child(n) td.ll-gdiff{color:var(--faint);font-weight:400}     /* 和文の斜体は字形が崩れるので、淡い色だけで「まとめられない」を示す */
+.ll-gtog{width:18px;height:18px;margin:0 4px 0 -4px;padding:0;border:0;background:transparent;color:var(--h-input);font-size:12px;cursor:pointer;vertical-align:middle;transition:transform .15s}
+tr.ll-ghead[aria-expanded="false"] .ll-gtog{transform:rotate(-90deg)}
+.ll-gn{margin-left:8px;padding:0 7px;border-radius:999px;background:var(--surface);color:var(--h-input);font-size:var(--fs-xs);font-weight:800;font-variant-numeric:tabular-nums}
+.ll-lot.is-sub{font-size:13px;font-weight:600;color:#6a86a6;text-decoration-color:transparent}
+.ll-lot.is-sub:hover{color:var(--h-input);text-decoration-color:currentColor}
+/* カードで見ている行（背景は「いまのロット」のアンバーと重ならないよう、藍の枠で示す） */
+.ll-grid tbody tr.is-carded td{box-shadow:inset 0 2px 0 var(--h-input),inset 0 -2px 0 var(--h-input)}
+.ll-grid tbody tr.is-carded td.ll-lotcol{box-shadow:inset 0 2px 0 var(--h-input),inset 0 -2px 0 var(--h-input),inset 3px 0 0 var(--h-input)}
+
+/* 件数の横: まとめているとき（何が効いているか・全部開く／畳む・やめる）と、カードの案内 */
+.ll-groupbar{display:flex;align-items:center;gap:6px}
+.ll-gchip{padding:2px 10px;border-radius:999px;background:var(--input-soft);color:var(--h-input);font-size:12.5px;font-weight:800;white-space:nowrap}
+.ll-groupbar button{height:26px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);cursor:pointer;font-family:inherit;font-size:12.5px;padding:0 9px}
+.ll-groupbar button:hover{border-color:var(--h-input);color:var(--h-input)}
+.ll-hint{color:var(--muted);font-size:12.5px}

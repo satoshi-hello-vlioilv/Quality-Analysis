@@ -1,0 +1,82 @@
+/* =========================================================================
+   LotDsp 項目の紐づけ（調査の道具）
+   - 手順は 1→2→3 を番号つきの3枚で見せる（探させない・思い出させない）。選んだあとは「次にすること」を結果の上に出す。
+   - 色: 藍＝主操作、緑＝確定、アンバー＝候補（もう1ロットで確かめる）、赤＝食い違い、灰＝いまは使っていない/用途なし。
+   ========================================================================= */
+body.link-page{overflow:auto;height:auto;background:var(--bg)}
+.lk-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 24px;color:var(--on-fill);
+  background:linear-gradient(110deg,#1c3550,#2b5f79)}
+.lk-bar small{opacity:.75;letter-spacing:.12em;font-size:11px}
+.lk-bar h1{margin:2px 0 0;font-size:20px}
+.lk-back{color:var(--on-fill);text-decoration:none;padding:6px 14px;border:1px solid var(--on-dark-line);border-radius:999px;background:var(--on-dark-fill);font-weight:700;font-size:13px}
+.lk-back:hover{background:var(--on-dark-hover)}
+.lk-main{max-width:1180px;margin:0 auto;padding:18px 24px 48px;display:grid;gap:16px}
+.lk-lead{margin:0;color:var(--ink);line-height:1.7}
+.lk-lead code{background:var(--surface-4);padding:0 5px;border-radius:4px;font-size:.92em}
+.lk-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.lk-steps li{display:flex;gap:12px;padding:12px 14px;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.lk-steps li>b{flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--h-input);color:var(--on-fill)}
+.lk-steps h2{margin:0 0 3px;font-size:var(--fs-md)}
+.lk-steps p{margin:0;color:var(--muted);font-size:var(--fs-sm);line-height:1.6}
+.lk-pick{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;gap:12px}
+.lk-drop{display:grid;gap:4px;place-items:center;text-align:center;padding:26px 16px;border:2px dashed #a9bfd6;border-radius:12px;background:var(--surface-2);cursor:pointer}
+.lk-drop:hover,.lk-drop.is-over{border-color:var(--h-input);background:var(--input-soft)}
+.lk-drop input{position:absolute;opacity:0;width:1px;height:1px}
+.lk-drop:focus-within{outline:3px solid var(--focus-ring)}
+.lk-drop-main{font-weight:800;color:var(--h-input);font-size:var(--fs-lg)}
+.lk-drop-sub{color:var(--muted);font-size:var(--fs-sm)}
+.lk-files{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.lk-files li{display:flex;align-items:center;gap:10px;padding:6px 10px;border:1px solid var(--line-soft);border-radius:8px;background:var(--surface-2);font-size:var(--fs-sm)}
+.lk-files li .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+.lk-files li .tag{padding:1px 8px;border-radius:999px;background:var(--input-soft);color:var(--h-input);font-weight:800}
+.lk-files li .tag.ng{background:var(--danger-bg);color:var(--danger)}
+.lk-files li .meta{color:var(--muted)}
+.lk-run{display:flex;align-items:center;gap:12px}
+.lk-primary{height:36px;padding:0 22px;border:0;border-radius:8px;background:var(--h-input);color:var(--on-fill);font-weight:800;font-size:var(--fs-md);cursor:pointer}
+.lk-primary:hover:not(:disabled){background:#35587f}
+.lk-primary:disabled{opacity:.45;cursor:default}
+.lk-ghost{height:32px;padding:0 14px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);cursor:pointer;font-weight:700;font-size:13px}
+.lk-ghost:hover{border-color:var(--h-input);color:var(--h-input)}
+.lk-state{color:var(--muted);font-size:var(--fs-sm)}
+.lk-state.is-busy{color:var(--h-input);font-weight:700}
+.lk-state.is-err{color:var(--danger);font-weight:700}
+.lk-result{display:grid;gap:12px}
+.lk-sum{display:flex;flex-wrap:wrap;gap:10px}
+.lk-chip{padding:8px 16px;border-radius:10px;background:var(--surface);border:1px solid var(--line);display:grid;gap:0;min-width:110px}
+.lk-chip b{font-size:22px;font-variant-numeric:tabular-nums;line-height:1.1}
+.lk-chip span{font-size:var(--fs-sm);color:var(--muted)}
+.lk-chip.ok b{color:var(--ok)}.lk-chip.cand b{color:var(--warn-ink)}.lk-chip.ng b{color:var(--danger)}
+.lk-next{padding:10px 14px;border-radius:10px;background:var(--amber-pale);border:1px solid var(--amber-line);color:var(--amber-ink);line-height:1.7;font-size:var(--fs-sm)}
+.lk-next:empty{display:none}
+.lk-next b{color:var(--ink)}
+.lk-tools{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.lk-seg{display:inline-flex}
+.lk-seg button{height:30px;padding:0 12px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-family:inherit;font-size:13px;margin-left:-1px}
+.lk-seg button:first-child{border-radius:7px 0 0 7px;margin-left:0}.lk-seg button:last-child{border-radius:0 7px 7px 0}
+.lk-seg button[aria-checked="true"]{background:var(--input-soft);border-color:var(--h-input);color:var(--h-input);font-weight:800;position:relative}
+.lk-check{display:inline-flex;align-items:center;gap:5px;font-size:13px;cursor:pointer}
+.lk-tools input[type=search]{height:30px;border:1px solid var(--edit-line);border-radius:7px;background:var(--edit-field);padding:0 10px;min-width:220px;font-family:inherit}
+.lk-tools .lk-ghost{margin-left:auto}
+.lk-tablewrap{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:62vh}
+.lk-table{width:100%;border-collapse:separate;border-spacing:0;font-size:var(--fs-md)}
+.lk-table th{position:sticky;top:0;background:var(--h-meta);color:var(--on-fill);text-align:left;padding:8px 12px;font-size:13px}
+.lk-table td{padding:6px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+.lk-table tr:nth-child(even) td{background:var(--surface-1)}
+.lk-table td.lbl{font-weight:800}
+.lk-table td.path{font-family:Consolas,"BIZ UDGothic",monospace;font-size:12.5px;color:var(--ro-ink);overflow-wrap:anywhere}
+.lk-table td.used{color:var(--muted);font-size:var(--fs-sm)}
+.lk-table .tab-row td{background:var(--surface-4);font-weight:800;color:var(--h-input)}
+.lk-st{display:inline-block;min-width:3.6em;text-align:center;padding:1px 8px;border-radius:999px;font-weight:800;font-size:12px}
+.lk-st.ok{background:var(--ok-soft);color:var(--ok-ink)}.lk-st.cand{background:var(--warn-soft);color:var(--warn-ink)}.lk-st.ng{background:var(--danger-bg);color:var(--danger)}
+.lk-alt{color:var(--muted);font-weight:400;font-size:var(--fs-sm)}
+.lk-only{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 14px}
+.lk-only summary{cursor:pointer;font-weight:800;color:var(--muted)}
+.lk-only p{margin:6px 0 0;line-height:1.8;font-size:var(--fs-sm);color:var(--ink)}
+@media (max-width:820px){.lk-steps{grid-template-columns:1fr}}
+
+/* 応答に入っている項目の一覧（調査の道具の2つ目） */
+.lk-survey h2{margin:0;font-size:var(--fs-lg)}
+.lk-lot{height:34px;width:200px;padding:0 10px;border:1px solid var(--line);border-radius:8px;font-size:var(--fs-md);background:var(--surface)}
+.lk-lot:focus{outline:3px solid var(--focus-ring);border-color:var(--h-input)}
+.lk-survey-out{margin:0;max-height:420px;overflow:auto;padding:12px 14px;background:var(--surface-2);border:1px solid var(--line-soft);
+  border-radius:8px;font-size:12px;line-height:1.55;white-space:pre}

@@ -1,0 +1,1450 @@
+<!DOCTYPE html>
+<!-- saved from url=(0062)http://nlmfangyweb1a/LotDspWeb/#/lotdsp/faces/ProgressInfo.jsp -->
+<!-- LotDsp「進度情報」を Edge で保存した実物（2026-09-27・ロット L7150C0）。
+     script/style を除き、販売員・取引先・送り先・納入先を見本の値に置き換えた。表の形は手を加えていない。 -->
+<html lang="jp" ng-app="app" class="ng-scope"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <title>Webロット問合せ</title>
+    <meta name="description" content="">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- キャッシュ関係調査中 -->
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Cache-Control" content="no-cache">
+    <meta http-equiv="Expires" content="-1">
+
+    <!--  ./css----------------------------------------------------------------------------------/ -->
+    <!--
+    -->
+    <!-- 各プロジェクトの固有CSS -->
+    <!--  ./js----------------------------------------------------------------------------------/ -->
+    <!--  -->
+    <!-- -->
+    <!-- -->
+    <!-- -->
+
+    <!-- pdfjs -->
+    <!--
+    -->
+
+	<!--
+	-->
+
+	<!-- TODO UI-TREE -->
+	<!--
+	-->
+
+	<!--
+	-->
+
+</head>
+
+<body id="edgeFullScreenElement" class=""><a href="http://nlmfangyweb1a/LotDspWeb/#" class="back-to-top" title="トップへ">Back to Top</a>
+    <!-- uiView: --><div ui-view="" class="ng-scope" style=""><!--?xml version="1.0"?-->
+
+
+
+  <title class="ng-scope"></title>
+
+
+  <form id="form1" class="form ng-pristine ng-valid ng-scope" style="margin-left: -5px; height: calc(100vh - 20px);">
+    <div style="position: sticky; top: 0; height: 210px; z-index: 1; background: #FFFFFF;">
+        <span id="header" style="background-color: rgb(244, 233, 233); display: block; font-family: monospace; height: 35px; width: 100%;">
+            <span id="messageArea" class="message"></span>
+            <span style="font-family: monospace; left: 4px; top: 10px; position: absolute; text-align: left; vertical-align: top; width: 55px">ﾛｯﾄ番号</span>
+            <input type="text" ng-model="common.searchLtno" id="common_searchLtno" name="searchLtno" onclick="InputTextSelect(this);" style="height: 25px; left: 60px; top: 8px; position: absolute; text-align: left; vertical-align: middle; width: 70px;text-transform:uppercase;" tabindex="1" class="ng-pristine ng-untouched ng-valid ng-not-empty">
+            <span style="font-family: monospace; height: 20px; left: 140px; top: 10px; position: absolute; text-align: left; vertical-align: top; width: 65px">検査番号</span>
+            <input type="text" ng-model="common.searchKnno" id="common_searchKnno" name="searchKnno" onclick="InputTextSelect(this);" style="height: 25px; left: 200px; top: 8px; position: absolute; text-align: left; vertical-align: middle; width: 70px;text-transform:uppercase;" tabindex="2" class="ng-pristine ng-untouched ng-valid ng-empty">
+            <button type="submit" class="btn btn-default btnCustom lotdspBtnCustom" ng-click="action.search()" style="height: 25px; left: 280px; top: 8px; position: absolute; vertical-align: middle; width: 60px" tabindex="3">
+                <span class="glyphicon" aria-hidden="true">
+                </span>検索
+            </button>
+            <span class="header-label ng-binding" style="left: 852px; top: 10px; position: absolute; width: 150px" ng-show="common.tabSetRendered">26/09/27 07:25:19</span>
+            <span class="header-label" style="left: 768px; top: 10px; position: absolute; width: 98px" ng-show="common.tabSetRendered">最終更新日: </span>
+            <span class="header-label ng-binding" style="left: 344px; top: 10px; position: absolute; text-align: center; vertical-align: middle; width: 120px">検索結果: 1件</span>
+            <span ng-show="util.isPreviewRendered(common);" class="ng-hide">
+            <a style="left: 480px; top: 8px; position: absolute; text-align: center; vertical-align: middle" href="http://nlmfangyweb1a/LotDspWeb/" ng-click="action.previousPage()">
+                <img src="./Webロット問合せ_files/previous.gif" alt="" border="0" align="top">
+            前</a>
+            </span>
+            <span ng-show="util.isNextRendered(common);" class="ng-hide">
+            <a style="left: 530px; top: 8px; position: absolute; text-align: center; vertical-align: middle" href="http://nlmfangyweb1a/LotDspWeb/" ng-click="action.nextPage()">次
+            <img src="./Webロット問合せ_files/next.gif" alt="" border="0" align="top"></a>
+            </span>
+        </span>
+        <!-- タブ項目 -->
+        <div class="MniTabDiv" ng-show="common.tabSetRendered">
+        <table border="0" cellspacing="0" cellpadding="0" class="MniTabTbl" title="" style="margin-top: -5px;">
+          <tbody><tr>
+            <td>
+                <a class="MniTabLnk TabPad" href="http://nlmfangyweb1a/LotDspWeb/" ng-click="action.showIcasInfo();">ICAS情報</a>
+            </td>
+            <td class="MniTabTblSelTd">
+              <div class="MniTabSelTxt" title="Current Selection:"><span class=" disabled TabPad">進度情報</span></div>
+            </td>
+            <td><a class="MniTabLnk TabPad" href="http://nlmfangyweb1a/LotDspWeb/" ng-click="action.showManufacturingInfo();">製造情報</a></td>
+            <td><a class="MniTabLnk TabPad" href="http://nlmfangyweb1a/LotDspWeb/" ng-click="action.showTestInfo();">試験情報</a></td>
+            <td><a class="MniTabLnk TabPad" href="http://nlmfangyweb1a/LotDspWeb/" ng-click="action.showQualityInfo();">品質情報</a></td>
+            <td><a class="MniTabLnk TabPad" href="http://nlmfangyweb1a/LotDspWeb/" ng-click="action.showCladInfo();">クラッド情報</a></td>
+            <td><a class="MniTabLnk TabPad" href="http://nlmfangyweb1a/LotDspWeb/" ng-click="action.showCFInfo();">焼鈍情報</a></td>
+            <td><a class="MniTabLnk TabPad" href="http://nlmfangyweb1a/LotDspWeb/" ng-click="action.showHikiateInfo();">引当情報</a></td>
+          </tr>
+        </tbody></table>
+        </div>
+        <!-- ICAS情報タブ以外の共通部分 開始-->
+        <!--ロット番号～Yマーク日-->
+        <table border="0" cellpadding="5" cellspacing="0" style="height: 80px; left: 5px; top: 70px; position: absolute;" width="1920" ng-show="common.tabSetRendered" class="">
+          <tbody>
+            <tr>
+              <td>
+                <table border="0" cellpadding="0" cellspacing="0">
+                  <tbody>
+                    <tr>
+                      <td>
+                        <table class="item-width1" border="0" cellpadding="0" cellspacing="1">
+                          <tbody>
+                            <tr class="item-label1">
+                              <td><span>ﾛｯﾄ番号</span></td>
+                            </tr>
+                            <tr class="item-value1">
+                              <td><span class="ng-binding">L7150C0</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                      <td>
+                        <table class="item-width1" border="0" cellpadding="0" cellspacing="1">
+                          <tbody>
+                            <tr class="item-label1">
+                              <td><span>鋳造番号</span></td>
+                            </tr>
+                            <tr class=" item-value1">
+                              <td><span class="ng-binding">J66G16A</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                      <td>
+                        <table class="item-width1" border="0" cellpadding="0" cellspacing="1">
+                          <tbody>
+                            <tr class="item-label1">
+                              <td><span>検査番号</span></td>
+                            </tr>
+                            <tr class="item-value1">
+                              <td><span class="ng-binding">N690979</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                      <td>
+                        <table border="0" cellpadding="0" cellspacing="1" style="width:90px;">
+                          <tbody>
+                            <tr class="item-label1">
+                              <td><span>ｵｰﾀﾞｰ番号</span></td>
+                            </tr>
+                            <tr class="item-value1">
+                              <td><span class="ng-binding">66508532</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                      <td>
+                        <table border="0" cellpadding="0" cellspacing="1" style="width: 60px;">
+                          <tbody>
+                            <tr class="item-label1">
+                              <td><span>用途</span></td>
+                            </tr>
+                            <tr class="item-value1">
+                              <td><span class="ng-binding">H537</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                      <td>
+                        <table class="item-width1" border="0" cellpadding="0" cellspacing="1" style="width: 120px;">
+                          <tbody>
+                            <tr class="item-label1">
+                              <td><span>用途名</span></td>
+                            </tr>
+                            <tr class="item-value1">
+                              <td><span class="ng-binding">ﾌｳｺｳｾﾞﾝﾕｳ</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                      <td>
+                        <table class="item-width1" border="0" cellpadding="0" cellspacing="1" style="width: 120px;">
+                          <tbody>
+                            <tr class="item-label1">
+                              <td><span>ｶｰﾄﾞ区分</span></td>
+                            </tr>
+                            <tr class="item-value1">
+                              <td><span class="ng-binding">１本口</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                      <td>
+                        <table class="item-width1" border="0" cellpadding="0" cellspacing="1" style="width: 70px;">
+                          <tbody>
+                            <tr class="item-label1">
+                              <td><span>本数</span></td>
+                            </tr>
+                            <tr class="item-value1">
+                              <td class="prog-value-right"><span class="ng-binding">1.0000</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                      <td>
+                        <table class="item-width1" border="0" cellpadding="0" cellspacing="1" style="width: 80px;">
+                          <tbody>
+                            <tr class="item-label1">
+                              <td><span>仕掛状態</span></td>
+                            </tr>
+                            <tr class="item-value1">
+                              <td class="item-width2"><span class="DataKbnGreen">倉入</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                      <td>
+                        <table class="item-width1" border="0" cellpadding="0" cellspacing="1" style="width:90px;">
+                          <tbody>
+                            <tr class="item-label1">
+                              <td class="item-width2"><span>倉入日</span></td>
+                            </tr>
+                            <tr class="item-value1">
+                              <td class="item-width2"><span class="ng-binding">26/09/26</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                      <td>
+                          <table bgcolor="white" border="0" cellpadding="0" cellspacing="1">
+                            <tbody>
+                              <tr class="item-label2">
+                                <td class="item-width2" style="width: 90px;"><span>営業納期</span></td>
+                                <td class="item-value2" style="width: 90px;"><span class="ng-binding">26/09/02</span></td>
+                              </tr>
+                              <tr class="item-label2">
+                                <td class="item-width2"><span>特急日</span></td>
+                                <td class="item-value2"><span class="ng-binding"></span></td>
+                              </tr>
+                            </tbody>
+                          </table>
+                       </td>
+                       <td>
+                          <table bgcolor="white" border="0" cellpadding="0" cellspacing="1">
+                            <tbody>
+                              <tr class="item-label1">
+                                <td class="item-width1" style="width: 40px;"><span>納期</span></td>
+                                <td class="item-value1" style="width: 140px;"><span class="ng-binding">2:顧客指定品</span></td>
+                              </tr>
+                              <tr class="item-label1">
+                                <td class="item-width1" style="width: 40px;"><span>内訳</span></td>
+                                <td class="item-value1" style="width: 140px;"><span class="ng-binding">約</span></td>
+                              </tr>
+                            </tbody>
+                          </table>
+                       </td>
+                       <td>
+                        <table class="item-width1" border="0" cellpadding="0" cellspacing="1" style="width: 60px;margin-left:10px;">
+                          <tbody>
+                            <tr class="item-label1">
+                              <td><span>比重</span></td>
+                            </tr>
+                            <tr class="item-value1">
+                              <td class="prog-value-right"><span class="ng-binding">2.7300</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                      <td>
+                       <table class="item-width1" border="0" cellpadding="0" cellspacing="1" style="width: 70px;margin-left:10px;">
+                         <tbody>
+                           <tr class="item-label1">
+                             <td class="item-width2"><span>試No</span></td>
+                           </tr>
+                           <tr class="item-value1">
+                             <td class="item-width2"><span class="ng-binding"></span></td>
+                           </tr>
+                         </tbody>
+                       </table>
+                     </td>
+                     <td>
+                       <table class="item-width1" border="0" cellpadding="0" cellspacing="1" style="width: 100px;">
+                         <tbody>
+                           <tr class="item-label1">
+                             <td class="item-width2"><span>試験者名</span></td>
+                           </tr>
+                           <tr class="item-value1">
+                             <td class="item-width2"><span class="ng-binding"></span></td>
+                           </tr>
+                         </tbody>
+                       </table>
+                     </td>
+                     <td>
+                         <table bgcolor="white" border="0" cellpadding="0" cellspacing="1" style="margin-left:10px;">
+                            <tbody>
+                              <tr class="item-label2">
+                                <td class="item-width2" style="width: 80px"><span>仕様書No</span></td>
+                                <td class="item-value2" style="width: 130px"><span class="ng-binding">1801R01      </span></td>
+                              </tr>
+                              <tr class="item-label2">
+                                <td class="item-width2" style="width: 80px"><span>販売員</span></td>
+                                <td class="item-value2" style="width: 130px">
+                                    <!-- ngIf: common.tantosha_MEI --><span ng-if="common.tantosha_MEI" class="ng-binding ng-scope">
+                                        販売　太郎
+                                    </span><!-- end ngIf: common.tantosha_MEI -->
+                                    <!-- ngIf: !common.tantosha_MEI -->
+                                </td>
+                             </tr>
+                            </tbody>
+                         </table>
+                     </td>
+                     <td>
+                         <table bgcolor="white" border="0" cellpadding="0" cellspacing="1" style="margin-left:10px;">
+                            <tbody>
+                              <tr class="item-label2">
+                                <td class="item-width2" style="width: 50px"><span>VC表</span></td>
+                                <td class="item-value2" style="width: 80px"><span class="ng-binding"></span></td>
+                              </tr>
+                              <tr class="item-label2">
+                                <td class="item-width2" style="width: 50px"><span>VC裏</span></td>
+                                <td class="item-value2" style="width: 80px"><span class="ng-binding"></span></td>
+                             </tr>
+                            </tbody>
+                         </table>
+                     </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <table bgcolor="white" border="0" cellpadding="0" cellspacing="0" style="vertical-align: top; margin-top: 2px;">
+                  <tbody>
+                    <tr>
+                      <td>
+                        <table bgcolor="white" border="0" cellpadding="0" cellspacing="0">
+                          <tbody>
+                            <tr class="item-label1" style="width: 120px; background-color: white;">
+                              <td>
+                                <!--材質～重量-->
+                                <table border="0" cellpadding="0" cellspacing="0">
+                                  <tbody>
+                                    <tr>
+                                      <td>
+                                        <table bgcolor="white" border="0" cellpadding="0" cellspacing="1">
+                                          <tbody>
+                                            <tr class="item-label1" style="width: 45px">
+                                              <td class="item-width2"><span>&nbsp;</span></td>
+                                            </tr>
+                                            <tr class="item-label1">
+                                              <td class="item-width2" style="height: 25px;"><span>ｵｰﾀﾞｰ</span></td>
+                                            </tr>
+                                            <tr class="item-label1">
+                                              <td class="item-width2" style="height: 25px;"><span>製造</span></td>
+                                            </tr>
+                                          </tbody>
+                                        </table>
+                                      </td>
+                                      <td>
+                                        <table bgcolor="white" border="0" cellpadding="0" cellspacing="1">
+                                          <tbody>
+                                            <tr class="item-label1">
+                                              <td class="item-width2" style="width: 60px"><span>材質</span></td>
+                                              <td class="item-width3"><span>&nbsp;</span></td>
+                                              <td class="item-width2" style="width: 60px"><span>調質</span></td>
+                                              <td class="item-width3"><span>&nbsp;</span></td>
+                                              <td class="item-width1"><span>板厚</span></td>
+                                              <td class="item-width3"><span>&nbsp;</span></td>
+                                              <td class="item-width1"><span>板幅</span></td>
+                                              <td class="item-width3"><span>&nbsp;</span></td>
+                                              <td class="item-width2" style="width: 70px"><span>板丈</span></td>
+                                              <td class="item-width2" style="width: 70px"><span>重量</span></td>
+                                            </tr>
+                                            <tr class="item-value1">
+                                              <td class="item-width2"><span class="ng-binding">MFX2</span></td>
+                                              <td class="item-width3"><span>-</span></td>
+                                              <td class="item-width2"><span class="ng-binding">O</span></td>
+                                              <td class="item-width3"><span> </span></td>
+                                              <td class="item-width2 prog-value-right"><span class="ng-binding">0.500</span></td>
+                                              <td class="item-width3"><span>×</span></td>
+                                              <td class="item-width2 prog-value-right"><span class="ng-binding">40.00</span></td>
+                                              <td class="item-width3"><span>×</span></td>
+                                              <td class="item-width2 test-value-right-w100"><span class="ng-binding">0.0</span></td>
+                                              <td class="item-width2 test-value-right-w100"><span class="ng-binding">24000.0</span></td>
+                                            </tr>
+                                            <tr class="item-value1">
+                                              <td class="item-width2"><span class="ng-binding">MFX2</span></td>
+                                              <td class="item-width3"><span>-</span></td>
+                                              <td class="item-width2"><span class="ng-binding">O</span></td>
+                                              <td class="item-width3"><span> </span></td>
+                                              <td class="item-width2 prog-value-right"><span class="ng-binding">0.505</span></td>
+                                              <td class="item-width3"><span>×</span></td>
+                                              <td class="item-width2 prog-value-right"><span class="ng-binding">39.90</span></td>
+                                              <td class="item-width3"><span>×</span></td>
+                                              <td class="item-width2 test-value-right-w100"><span class="ng-binding">0.0</span></td>
+                                              <td class="item-width2 test-value-right-w100"><span class="ng-binding">5567.9</span></td>
+                                            </tr>
+                                          </tbody>
+                                        </table>
+                                      </td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                      <td>
+                        <table bgcolor="white" border="0" cellpadding="0" cellspacing="1" style="margin-left:10px;">
+                          <tbody>
+                            <tr class="item-label2">
+                              <td class="item-width1" style="width: 40px"><span>歩留</span></td>
+                              <td class="item-value1" style="text-align: left;"><span class="ng-binding">1:生産対象</span></td>
+                            </tr>
+                            <tr class="item-label2">
+                              <td class="item-width1" style="width: 40px"><span>地取</span></td>
+                              <td class="item-value1" style="text-align: left;"><span class="ng-binding">一般</span></td>
+                            </tr>
+                            <tr class="item-label2">
+                              <td class="item-width1" style="width: 40px"><span>形状</span></td>
+                              <td class="item-value1" style="text-align: left;"><span class="ng-binding">4HIｺｲﾙ</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                      <td>
+                        <table bgcolor="white" border="0" cellpadding="0" cellspacing="1">
+                          <tbody>
+                            <tr>
+                              <td style="width: 40px;height:25px;"></td>
+                            </tr>
+                            <tr>
+                              <td style="width: 40px;height:25px;"></td>
+                            </tr>
+                            <tr class="item-label2">
+                              <td class="item-width1" style="width: 40px"><span>内径</span></td>
+                              <td class="item-value1" style="width: 50px;text-align: right;"><span class="ng-binding">300</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                      <td>
+                        <table bgcolor="white" border="0" cellpadding="0" cellspacing="1">
+                          <tbody>
+                            <tr class="item-label1">
+                              <td style="width:90px;"><span>HOT予定日</span></td>
+                              <td class="item-value1" style="width:90px;"><!-- ngIf: common.prj > 0 --><span ng-if="common.prj &gt; 0" class="ng-binding ng-scope">26/09/15</span><!-- end ngIf: common.prj > 0 --></td>
+                              <td style="width: 50px;"><span>ｴﾝﾄﾘｰ</span></td>
+                              <td class="item-value1" style="width: 40px;"><span class="ng-binding">0</span></td>
+                              <td style="width: 50px;"><span>釜番</span></td>
+                              <td class="item-value1" style="width:90px;"><span class="ng-binding">333</span></td>
+                              <td style="width: 60px;"><span>ｽﾗﾌﾞ</span></td>
+                              <td class="item-value1" style="width: 60px;"><span class="ng-binding">625ｿ</span></td>
+                            </tr>
+                            <tr class="item-label1">
+                              <td><span>Yﾏｰｸ日</span></td>
+                              <td class="item-value1" style="width:90px;"><span class="ng-binding"></span></td>
+                              <td style="width: 50px;"><span>設計</span></td>
+                              <td style="width: 40px;"><span>均熱</span></td>
+                              <td class="item-value1" style="width: 40px;"><span class="ng-binding">C</span></td>
+                              <td style="width:90px;"><span>ﾊﾟｽ</span></td>
+                              <td class="item-value1" style="width: 60px;"><span class="ng-binding">ﾄ</span></td>
+                              <td style="background-color:white;width: 60px;"></td>
+                            </tr>
+                            <tr class="item-label1">
+                              <td><span>ｽﾌﾟｰﾙ</span></td>
+                              <td>
+                                  <table bgcolor="white" border="0" cellpadding="0" cellspacing="1">
+                                      <tbody>
+                                        <tr style="width:160px;">
+                                          <td style="width:60px;"><span>内径</span></td>
+                                          <td class="item-value1" style="width:100px;text-align: right;"><span class="ng-binding">0</span></td>
+                                        </tr>
+                                      </tbody>
+                                 </table>
+                              </td>
+                              <td style="width: 50px;"><span>肉厚</span></td>
+                              <td class="item-value1" style="width: 40px;text-align: right;"><span class="ng-binding">0</span></td>
+                              <td style="width: 50px;"><span>種別</span></td>
+                              <td class="item-value1" style="width:90px;"><span class="ng-binding">なし</span></td>
+                              <td><span>焼鈍ST</span></td>
+                              <td class="item-value1" style="width: 60px;"><span class="ng-binding"></span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                      <td>
+                        <table class="item-width1" border="0" cellpadding="0" cellspacing="1" style="width:120px;margin-left:10px;">
+                          <tbody>
+                            <tr class="item-label1">
+                              <td style="width:70px;"><span>仕様MS</span></td>
+                              <td style="width:25px;"><span>品</span></td>
+                              <td style="width:25px;"><span>製</span></td>
+                            </tr>
+                            <tr class="item-value1">
+                              <td class="item-width2"><span class="ng-binding">322601</span></td>
+                              <td class="item-width2" style="width:25px;"><span class="ng-binding">1</span></td>
+                              <td class="item-width2" style="width:25px;"><span class="ng-binding">1</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                      <td>
+                        <table bgcolor="white" border="0" cellpadding="0" cellspacing="1" style="margin-left:10px;">
+                          <tbody>
+                            <tr class="item-label2">
+                              <td class="item-width1" style="width: 40px"><span>需要</span></td>
+                              <td class="item-value1" style="width: 40px"><span class="ng-binding">H742</span></td>
+                            </tr>
+                            <tr class="item-label2">
+                              <td class="item-width1" style="width: 40px"><span>BU</span></td>
+                              <td class="item-value1" style="width: 40px"><span class="ng-binding">Y</span></td>
+                            </tr>
+                            <tr class="item-label2">
+                              <td class="item-width1" style="width: 40px"><span>地区</span></td>
+                              <td class="item-value1" style="width: 40px"><span class="ng-binding">33</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                      <td>
+                        <table bgcolor="white" border="0" cellpadding="0" cellspacing="1">
+                          <tbody>
+                            <tr class="item-label2">
+                              <td class="item-width2" style="width: 60px"><span>取引先</span></td>
+                              <td class="com-value-left-w180" style="width: 270px"><span class="ng-binding">SAMPLE CUSTOMER</span></td>
+                            </tr>
+                            <tr class="item-label2">
+                              <td class="item-width2"><span>送り先</span></td>
+                              <td class="com-value-left-w180"><span class="ng-binding">ｻﾝﾌﾟﾙ ｿｳｺ</span></td>
+                            </tr>
+                            <tr class="item-label2">
+                              <td class="item-width2"><span>納入先</span></td>
+                              <td class="com-value-left-w180"><span class="ng-binding">ｻﾝﾌﾟﾙ</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                      <td><span id="form1:space2" class="space">*</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+    </div>
+    
+    <!-- 各タブ固有項目 -->
+    <div style="height: calc(100vh - 230px); -rave-layout: grid; margin-left: 6px;" class="layoutPanel" ng-show="common.tabSetRendered">
+        <table border="0" cellpadding="5" cellspacing="0" style="width: 1920px;">
+          <tbody>
+            <tr>
+              <td>
+                <!--設計～実績-->
+                <table border="0" cellpadding="0" cellspacing="0">
+                  <tbody>
+                    <tr>
+                      <td class="prog-column-sbsmbox">
+                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                          <tbody>
+                            <tr>
+                              <td class="prog-header-sbsm"><span>設計</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                      <td class=" prog-column-jbsmbox">
+                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                          <tbody>
+                            <tr>
+                              <td class="prog-header-jbsm"><span>実績</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="prog-column-sbsmbox">
+                        <table bgcolor="white" border="0" cellpadding="0" cellspacing="1">
+                          <thead>
+                            <tr>
+                              <th class="prog-header-sbsm" scope="col" width="30"><span class="prog-label-boxno">№</span></th>
+                              <th class="prog-header-sbsm" scope="col"><span class="prog-label-boxno"></span></th>
+                              <th class="prog-header-sbsm" scope="col" width="60"><span class="prog-label-sbsm">設備</span></th>
+                              <th class="prog-header-sbsm" scope="col"><span class="prog-label-boxno"></span></th>
+                              <th class="prog-header-sbsm" scope="col" width="90"><span class="prog-label-sbmmddc">日付</span></th>
+                              <th class="prog-header-sbsm" scope="col"><span class="prog-label-boxno"></span></th>
+                              <th class="prog-header-sbsm" scope="col" width="80"><span class="prog-label-sbx">板厚</span></th>
+                              <th class="prog-header-sbsm" scope="col"><span class="prog-label-boxno"></span></th>
+                              <th class="prog-header-sbsm" scope="col" width="80"><span class="prog-label-sby">板幅</span></th>
+                              <th class="prog-header-sbsm" scope="col"><span class="prog-label-boxno"></span></th>
+                              <th class="prog-header-sbsm" scope="col" width="60"><span class="prog-label-sbz">板丈</span></th>
+                              <th class="prog-header-sbsm" scope="col"><span class="prog-label-boxno"></span></th>
+                              <th class="prog-header-sbsm" scope="col" width="60"><span class="prog-label-sbw">重量</span></th>
+                              <th class="prog-header-sbsm" scope="col"><span class="prog-label-boxno"></span></th>
+                              <th class="prog-header-sbsm" scope="col" width="50"><span class="prog-label-sbpat">ﾊﾟ</span></th>
+                              <th class="prog-header-sbsm" scope="col"><span class="prog-label-boxno"></span></th>
+                              <th class="prog-header-sbsm" scope="col" width="40"><span class="prog-label-sbyky">横</span></th>
+                              <th class="prog-header-sbsm" scope="col"><span class="prog-label-boxno"></span></th>
+                              <th class="prog-header-sbsm" scope="col" width="40"><span class="prog-label-sbtty">縦</span></th>
+                              <th class="prog-header-sbsm" scope="col"><span class="prog-label-boxno"></span></th>
+                              <th class="prog-header-sbsm" scope="col" width="80"><span class="prog-label-sbmh">枚本</span></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <!-- ngRepeat: meisaiInfo in staffProgressBoxInfos track by $index --><tr ng-repeat="meisaiInfo in staffProgressBoxInfos track by $index" class="list-row-even">
+                              <td class="prog-boxno"><span class="prog-boxno ng-binding">1</span></td>
+                              <td> </td>
+                              <td class="prog-sbsm"><span class="prog-sbsm ng-binding">HOT</span></td>
+                              <td> </td>
+                              <td class="prog-sbmmddc"><span class="prog-sbmmddc ng-binding">26/09/15</span></td>
+                              <td> </td>
+                              <td class="prog-sbx"><span class="prog-sbx ng-binding">7.000</span></td>
+                              <td> </td>
+                              <td class="prog-sby"><span class="prog-sby ng-binding">1220.00</span></td>
+                              <td> </td>
+                              <td class="prog-sbz"><span class="prog-sbz ng-binding">0.0</span></td>
+                              <td> </td>
+                              <td class="prog-sbw"><span class="prog-sbw ng-binding">6307.0</span></td>
+                              <td> </td>
+                              <td class="prog-sbpat"><span class="prog-sbpat ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-sbyky"><span class="prog-sbyky ng-binding">1</span></td>
+                              <td> </td>
+                              <td class="prog-sbtty"><span class="prog-sbtty ng-binding">1</span></td>
+                              <td> </td>
+                              <td class="prog-sbmh"><span class="prog-sbmh ng-binding">1.0</span></td>
+                            </tr><!-- end ngRepeat: meisaiInfo in staffProgressBoxInfos track by $index --><tr ng-repeat="meisaiInfo in staffProgressBoxInfos track by $index" class="list-row-odd">
+                              <td class="prog-boxno"><span class="prog-boxno ng-binding">2</span></td>
+                              <td> </td>
+                              <td class="prog-sbsm"><span class="prog-sbsm ng-binding">L-1</span></td>
+                              <td> </td>
+                              <td class="prog-sbmmddc"><span class="prog-sbmmddc ng-binding">26/09/16</span></td>
+                              <td> </td>
+                              <td class="prog-sbx"><span class="prog-sbx ng-binding">3.600</span></td>
+                              <td> </td>
+                              <td class="prog-sby"><span class="prog-sby ng-binding">1200.00</span></td>
+                              <td> </td>
+                              <td class="prog-sbz"><span class="prog-sbz ng-binding">0.0</span></td>
+                              <td> </td>
+                              <td class="prog-sbw"><span class="prog-sbw ng-binding">6307.0</span></td>
+                              <td> </td>
+                              <td class="prog-sbpat"><span class="prog-sbpat ng-binding">ﾋﾗ</span></td>
+                              <td> </td>
+                              <td class="prog-sbyky"><span class="prog-sbyky ng-binding">1</span></td>
+                              <td> </td>
+                              <td class="prog-sbtty"><span class="prog-sbtty ng-binding">1</span></td>
+                              <td> </td>
+                              <td class="prog-sbmh"><span class="prog-sbmh ng-binding">1.0</span></td>
+                            </tr><!-- end ngRepeat: meisaiInfo in staffProgressBoxInfos track by $index --><tr ng-repeat="meisaiInfo in staffProgressBoxInfos track by $index" class="list-row-even">
+                              <td class="prog-boxno"><span class="prog-boxno ng-binding">3</span></td>
+                              <td> </td>
+                              <td class="prog-sbsm"><span class="prog-sbsm ng-binding">L-1</span></td>
+                              <td> </td>
+                              <td class="prog-sbmmddc"><span class="prog-sbmmddc ng-binding">26/09/16</span></td>
+                              <td> </td>
+                              <td class="prog-sbx"><span class="prog-sbx ng-binding">2.200</span></td>
+                              <td> </td>
+                              <td class="prog-sby"><span class="prog-sby ng-binding">1200.00</span></td>
+                              <td> </td>
+                              <td class="prog-sbz"><span class="prog-sbz ng-binding">0.0</span></td>
+                              <td> </td>
+                              <td class="prog-sbw"><span class="prog-sbw ng-binding">6307.0</span></td>
+                              <td> </td>
+                              <td class="prog-sbpat"><span class="prog-sbpat ng-binding">ﾚﾗ</span></td>
+                              <td> </td>
+                              <td class="prog-sbyky"><span class="prog-sbyky ng-binding">1</span></td>
+                              <td> </td>
+                              <td class="prog-sbtty"><span class="prog-sbtty ng-binding">1</span></td>
+                              <td> </td>
+                              <td class="prog-sbmh"><span class="prog-sbmh ng-binding">1.0</span></td>
+                            </tr><!-- end ngRepeat: meisaiInfo in staffProgressBoxInfos track by $index --><tr ng-repeat="meisaiInfo in staffProgressBoxInfos track by $index" class="list-row-odd">
+                              <td class="prog-boxno"><span class="prog-boxno ng-binding">4</span></td>
+                              <td> </td>
+                              <td class="prog-sbsm"><span class="prog-sbsm ng-binding">L-1</span></td>
+                              <td> </td>
+                              <td class="prog-sbmmddc"><span class="prog-sbmmddc ng-binding">26/09/16</span></td>
+                              <td> </td>
+                              <td class="prog-sbx"><span class="prog-sbx ng-binding">1.300</span></td>
+                              <td> </td>
+                              <td class="prog-sby"><span class="prog-sby ng-binding">1200.00</span></td>
+                              <td> </td>
+                              <td class="prog-sbz"><span class="prog-sbz ng-binding">0.0</span></td>
+                              <td> </td>
+                              <td class="prog-sbw"><span class="prog-sbw ng-binding">6307.0</span></td>
+                              <td> </td>
+                              <td class="prog-sbpat"><span class="prog-sbpat ng-binding">ﾚﾗ</span></td>
+                              <td> </td>
+                              <td class="prog-sbyky"><span class="prog-sbyky ng-binding">1</span></td>
+                              <td> </td>
+                              <td class="prog-sbtty"><span class="prog-sbtty ng-binding">1</span></td>
+                              <td> </td>
+                              <td class="prog-sbmh"><span class="prog-sbmh ng-binding">1.0</span></td>
+                            </tr><!-- end ngRepeat: meisaiInfo in staffProgressBoxInfos track by $index --><tr ng-repeat="meisaiInfo in staffProgressBoxInfos track by $index" class="list-row-even">
+                              <td class="prog-boxno"><span class="prog-boxno ng-binding">5</span></td>
+                              <td> </td>
+                              <td class="prog-sbsm"><span class="prog-sbsm ng-binding">L-2</span></td>
+                              <td> </td>
+                              <td class="prog-sbmmddc"><span class="prog-sbmmddc ng-binding">26/09/16</span></td>
+                              <td> </td>
+                              <td class="prog-sbx"><span class="prog-sbx ng-binding">0.800</span></td>
+                              <td> </td>
+                              <td class="prog-sby"><span class="prog-sby ng-binding">1200.00</span></td>
+                              <td> </td>
+                              <td class="prog-sbz"><span class="prog-sbz ng-binding">0.0</span></td>
+                              <td> </td>
+                              <td class="prog-sbw"><span class="prog-sbw ng-binding">6307.0</span></td>
+                              <td> </td>
+                              <td class="prog-sbpat"><span class="prog-sbpat ng-binding">ﾋﾗ</span></td>
+                              <td> </td>
+                              <td class="prog-sbyky"><span class="prog-sbyky ng-binding">1</span></td>
+                              <td> </td>
+                              <td class="prog-sbtty"><span class="prog-sbtty ng-binding">1</span></td>
+                              <td> </td>
+                              <td class="prog-sbmh"><span class="prog-sbmh ng-binding">1.0</span></td>
+                            </tr><!-- end ngRepeat: meisaiInfo in staffProgressBoxInfos track by $index --><tr ng-repeat="meisaiInfo in staffProgressBoxInfos track by $index" class="list-row-odd">
+                              <td class="prog-boxno"><span class="prog-boxno ng-binding">6</span></td>
+                              <td> </td>
+                              <td class="prog-sbsm"><span class="prog-sbsm ng-binding">L-2</span></td>
+                              <td> </td>
+                              <td class="prog-sbmmddc"><span class="prog-sbmmddc ng-binding">26/09/16</span></td>
+                              <td> </td>
+                              <td class="prog-sbx"><span class="prog-sbx ng-binding">0.508</span></td>
+                              <td> </td>
+                              <td class="prog-sby"><span class="prog-sby ng-binding">1200.00</span></td>
+                              <td> </td>
+                              <td class="prog-sbz"><span class="prog-sbz ng-binding">0.0</span></td>
+                              <td> </td>
+                              <td class="prog-sbw"><span class="prog-sbw ng-binding">6261.0</span></td>
+                              <td> </td>
+                              <td class="prog-sbpat"><span class="prog-sbpat ng-binding">ﾚｱ</span></td>
+                              <td> </td>
+                              <td class="prog-sbyky"><span class="prog-sbyky ng-binding">1</span></td>
+                              <td> </td>
+                              <td class="prog-sbtty"><span class="prog-sbtty ng-binding">1</span></td>
+                              <td> </td>
+                              <td class="prog-sbmh"><span class="prog-sbmh ng-binding">1.0</span></td>
+                            </tr><!-- end ngRepeat: meisaiInfo in staffProgressBoxInfos track by $index --><tr ng-repeat="meisaiInfo in staffProgressBoxInfos track by $index" class="list-row-even">
+                              <td class="prog-boxno"><span class="prog-boxno ng-binding">7</span></td>
+                              <td> </td>
+                              <td class="prog-sbsm"><span class="prog-sbsm ng-binding">CAF</span></td>
+                              <td> </td>
+                              <td class="prog-sbmmddc"><span class="prog-sbmmddc ng-binding">26/09/17</span></td>
+                              <td> </td>
+                              <td class="prog-sbx"><span class="prog-sbx ng-binding">0.505</span></td>
+                              <td> </td>
+                              <td class="prog-sby"><span class="prog-sby ng-binding">1200.00</span></td>
+                              <td> </td>
+                              <td class="prog-sbz"><span class="prog-sbz ng-binding">0.0</span></td>
+                              <td> </td>
+                              <td class="prog-sbw"><span class="prog-sbw ng-binding">6261.0</span></td>
+                              <td> </td>
+                              <td class="prog-sbpat"><span class="prog-sbpat ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-sbyky"><span class="prog-sbyky ng-binding">1</span></td>
+                              <td> </td>
+                              <td class="prog-sbtty"><span class="prog-sbtty ng-binding">1</span></td>
+                              <td> </td>
+                              <td class="prog-sbmh"><span class="prog-sbmh ng-binding">1.0</span></td>
+                            </tr><!-- end ngRepeat: meisaiInfo in staffProgressBoxInfos track by $index --><tr ng-repeat="meisaiInfo in staffProgressBoxInfos track by $index" class="list-row-odd">
+                              <td class="prog-boxno"><span class="prog-boxno ng-binding">8</span></td>
+                              <td> </td>
+                              <td class="prog-sbsm"><span class="prog-sbsm ng-binding">TLV</span></td>
+                              <td> </td>
+                              <td class="prog-sbmmddc"><span class="prog-sbmmddc ng-binding">26/09/18</span></td>
+                              <td> </td>
+                              <td class="prog-sbx"><span class="prog-sbx ng-binding">0.505</span></td>
+                              <td> </td>
+                              <td class="prog-sby"><span class="prog-sby ng-binding">1200.00</span></td>
+                              <td> </td>
+                              <td class="prog-sbz"><span class="prog-sbz ng-binding">0.0</span></td>
+                              <td> </td>
+                              <td class="prog-sbw"><span class="prog-sbw ng-binding">6215.0</span></td>
+                              <td> </td>
+                              <td class="prog-sbpat"><span class="prog-sbpat ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-sbyky"><span class="prog-sbyky ng-binding">1</span></td>
+                              <td> </td>
+                              <td class="prog-sbtty"><span class="prog-sbtty ng-binding">1</span></td>
+                              <td> </td>
+                              <td class="prog-sbmh"><span class="prog-sbmh ng-binding">1.0</span></td>
+                            </tr><!-- end ngRepeat: meisaiInfo in staffProgressBoxInfos track by $index --><tr ng-repeat="meisaiInfo in staffProgressBoxInfos track by $index" class="list-row-even">
+                              <td class="prog-boxno"><span class="prog-boxno ng-binding">9</span></td>
+                              <td> </td>
+                              <td class="prog-sbsm"><span class="prog-sbsm ng-binding">LS4</span></td>
+                              <td> </td>
+                              <td class="prog-sbmmddc"><span class="prog-sbmmddc ng-binding">26/09/18</span></td>
+                              <td> </td>
+                              <td class="prog-sbx"><span class="prog-sbx ng-binding">0.505</span></td>
+                              <td> </td>
+                              <td class="prog-sby"><span class="prog-sby ng-binding">39.90</span></td>
+                              <td> </td>
+                              <td class="prog-sbz"><span class="prog-sbz ng-binding">0.0</span></td>
+                              <td> </td>
+                              <td class="prog-sbw"><span class="prog-sbw ng-binding">5568.0</span></td>
+                              <td> </td>
+                              <td class="prog-sbpat"><span class="prog-sbpat ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-sbyky"><span class="prog-sbyky ng-binding">29</span></td>
+                              <td> </td>
+                              <td class="prog-sbtty"><span class="prog-sbtty ng-binding">2</span></td>
+                              <td> </td>
+                              <td class="prog-sbmh"><span class="prog-sbmh ng-binding">58.0</span></td>
+                            </tr><!-- end ngRepeat: meisaiInfo in staffProgressBoxInfos track by $index --><tr ng-repeat="meisaiInfo in staffProgressBoxInfos track by $index" class="list-row-odd">
+                              <td class="prog-boxno"><span class="prog-boxno ng-binding">10</span></td>
+                              <td> </td>
+                              <td class="prog-sbsm"><span class="prog-sbsm ng-binding">KEN</span></td>
+                              <td> </td>
+                              <td class="prog-sbmmddc"><span class="prog-sbmmddc ng-binding">26/09/19</span></td>
+                              <td> </td>
+                              <td class="prog-sbx"><span class="prog-sbx ng-binding">0.505</span></td>
+                              <td> </td>
+                              <td class="prog-sby"><span class="prog-sby ng-binding">39.90</span></td>
+                              <td> </td>
+                              <td class="prog-sbz"><span class="prog-sbz ng-binding">0.0</span></td>
+                              <td> </td>
+                              <td class="prog-sbw"><span class="prog-sbw ng-binding">5568.0</span></td>
+                              <td> </td>
+                              <td class="prog-sbpat"><span class="prog-sbpat ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-sbyky"><span class="prog-sbyky ng-binding">1</span></td>
+                              <td> </td>
+                              <td class="prog-sbtty"><span class="prog-sbtty ng-binding">1</span></td>
+                              <td> </td>
+                              <td class="prog-sbmh"><span class="prog-sbmh ng-binding">58.0</span></td>
+                            </tr><!-- end ngRepeat: meisaiInfo in staffProgressBoxInfos track by $index -->
+                          </tbody>
+                        </table>
+                      </td>
+                      <td class=" prog-column-jbsmbox">
+                        <table bgcolor="white" border="0" cellpadding="0" cellspacing="1">
+                          <thead>
+                            <tr>
+                              <th class="prog-header-jbsm" scope="col" width="30"><span class="prog-label-boxno">№</span></th>
+                              <th class="prog-header-jbsm" scope="col"><span class="prog-label-boxno"> </span></th>
+                              <th class="prog-header-jbsm" scope="col" width="60"><span class="prog-label-jbsm">設備</span></th>
+                              <th class="prog-header-jbsm" scope="col"><span class="prog-label-boxno"> </span></th>
+                              <th class="prog-header-jbsm" scope="col" width="160"><span class="prog-label-jbedate">日付</span></th>
+                              <th class="prog-header-jbsm" scope="col"><span class="prog-label-boxno"> </span></th>
+                              <th class="prog-header-jbsm" scope="col" width="80"><span class="prog-label-jbx">板厚</span></th>
+                              <th class="prog-header-jbsm" scope="col"><span class="prog-label-boxno"> </span></th>
+                              <th class="prog-header-jbsm" scope="col" width="80"><span class="prog-label-jby">板幅</span></th>
+                              <th class="prog-header-jbsm" scope="col"><span class="prog-label-boxno"> </span></th>
+                              <th class="prog-header-jbsm" scope="col" width="60"><span class="prog-label-jbz">板丈</span></th>
+                              <th class="prog-header-jbsm" scope="col"><span class="prog-label-boxno"> </span></th>
+                              <th class="prog-header-jbsm" scope="col" width="60"><span class="prog-label-jbrw">重量</span></th>
+                              <th class="prog-header-jbsm" scope="col"><span class="prog-label-boxno"> </span></th>
+                              <th class="prog-header-jbsm" scope="col" width="50"><span class="prog-label-jbpat">ﾊﾟ</span></th>
+                              <th class="prog-header-jbsm" scope="col"><span class="prog-label-boxno"> </span></th>
+                              <th class="prog-header-jbsm" scope="col" width="90"><span class="prog-label-jbrmh">枚本</span></th>
+                              <th class="prog-header-jbsm" scope="col"><span class="prog-label-boxno"> </span></th>
+                              <th class="prog-header-jbsm" scope="col" width="30"><span class="prog-label-jbbn">B</span></th>
+                              <th class="prog-header-jbsm" scope="col"><span class="prog-label-boxno"> </span></th>
+                              <th class="prog-header-jbsm" scope="col" width="60"><span class="prog-label-jbfo">長さ</span></th>
+                              <th class="prog-header-jbsm" scope="col"><span class="prog-label-boxno"> </span></th>
+                              <th class="prog-header-jbsm" scope="col" width="60"><span class="prog-label-jbfo">前ｵﾌ</span></th>
+                              <th class="prog-header-jbsm" scope="col"><span class="prog-label-boxno"> </span></th>
+                              <th class="prog-header-jbsm" scope="col" width="60"><span class="prog-label-jbbo">後ｵﾌ</span></th>
+                              <th class="prog-header-jbsm" scope="col"><span class="prog-label-boxno"> </span></th>
+                              <th class="prog-header-jbsm" scope="col" width="60"><span class="prog-label-jbnx">肉厚</span></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <!-- ngRepeat: meisaiInfo in staffProgressJBoxInfos track by $index --><tr ng-repeat="meisaiInfo in staffProgressJBoxInfos track by $index" class="list-row-even">
+                              <td class="prog-boxno"><span class="prog-boxno ng-binding">1</span></td>
+                              <td> </td>
+                              <td class="prog-jbsm"><span class="prog-jbsm ng-binding">HOT</span></td>
+                              <td> </td>
+                              <td class="prog-jbedate"><span class="prog-jbedate ng-binding">26/09/17 17:16:31</span></td>
+                              <td> </td>
+                              <td class="prog-jbx"><span class="prog-jbx ng-binding">       7.000</span></td>
+                              <td> </td>
+                              <td class="prog-jby"><span class="prog-jby ng-binding">    1200.00</span></td>
+                              <td> </td>
+                              <td class="prog-jbz"><span class="prog-jbz ng-binding">       0.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbrw"><span class="prog-jbrw ng-binding">    6220.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbpat"><span class="prog-jbpat ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbrmh"><span class="prog-jbrmh ng-binding">       1.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbbn"><span class="prog-jbbn ng-binding"> 0</span></td>
+                              <td> </td>
+                              <td class="prog-jbfo"><span class="prog-jbfo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbfo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbbo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbbo ng-binding">0</span></td>
+                            </tr><!-- end ngRepeat: meisaiInfo in staffProgressJBoxInfos track by $index --><tr ng-repeat="meisaiInfo in staffProgressJBoxInfos track by $index" class="list-row-odd">
+                              <td class="prog-boxno"><span class="prog-boxno ng-binding">2</span></td>
+                              <td> </td>
+                              <td class="prog-jbsm"><span class="prog-jbsm ng-binding">L-1</span></td>
+                              <td> </td>
+                              <td class="prog-jbedate"><span class="prog-jbedate ng-binding">26/09/19 11:10:45</span></td>
+                              <td> </td>
+                              <td class="prog-jbx"><span class="prog-jbx ng-binding">       3.600</span></td>
+                              <td> </td>
+                              <td class="prog-jby"><span class="prog-jby ng-binding">    1200.00</span></td>
+                              <td> </td>
+                              <td class="prog-jbz"><span class="prog-jbz ng-binding">       0.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbrw"><span class="prog-jbrw ng-binding">    6220.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbpat"><span class="prog-jbpat ng-binding">001</span></td>
+                              <td> </td>
+                              <td class="prog-jbrmh"><span class="prog-jbrmh ng-binding">       1.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbbn"><span class="prog-jbbn ng-binding"> 0</span></td>
+                              <td> </td>
+                              <td class="prog-jbfo"><span class="prog-jbfo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbfo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbbo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbbo ng-binding">555</span></td>
+                            </tr><!-- end ngRepeat: meisaiInfo in staffProgressJBoxInfos track by $index --><tr ng-repeat="meisaiInfo in staffProgressJBoxInfos track by $index" class="list-row-even">
+                              <td class="prog-boxno"><span class="prog-boxno ng-binding">3</span></td>
+                              <td> </td>
+                              <td class="prog-jbsm"><span class="prog-jbsm ng-binding">L-1</span></td>
+                              <td> </td>
+                              <td class="prog-jbedate"><span class="prog-jbedate ng-binding">26/09/19 13:12:52</span></td>
+                              <td> </td>
+                              <td class="prog-jbx"><span class="prog-jbx ng-binding">       2.200</span></td>
+                              <td> </td>
+                              <td class="prog-jby"><span class="prog-jby ng-binding">    1200.00</span></td>
+                              <td> </td>
+                              <td class="prog-jbz"><span class="prog-jbz ng-binding">       0.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbrw"><span class="prog-jbrw ng-binding">    6220.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbpat"><span class="prog-jbpat ng-binding">001</span></td>
+                              <td> </td>
+                              <td class="prog-jbrmh"><span class="prog-jbrmh ng-binding">       1.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbbn"><span class="prog-jbbn ng-binding"> 0</span></td>
+                              <td> </td>
+                              <td class="prog-jbfo"><span class="prog-jbfo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbfo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbbo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbbo ng-binding">555</span></td>
+                            </tr><!-- end ngRepeat: meisaiInfo in staffProgressJBoxInfos track by $index --><tr ng-repeat="meisaiInfo in staffProgressJBoxInfos track by $index" class="list-row-odd">
+                              <td class="prog-boxno"><span class="prog-boxno ng-binding">4</span></td>
+                              <td> </td>
+                              <td class="prog-jbsm"><span class="prog-jbsm ng-binding">L-1</span></td>
+                              <td> </td>
+                              <td class="prog-jbedate"><span class="prog-jbedate ng-binding">26/09/19 15:05:05</span></td>
+                              <td> </td>
+                              <td class="prog-jbx"><span class="prog-jbx ng-binding">       1.300</span></td>
+                              <td> </td>
+                              <td class="prog-jby"><span class="prog-jby ng-binding">    1200.00</span></td>
+                              <td> </td>
+                              <td class="prog-jbz"><span class="prog-jbz ng-binding">       0.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbrw"><span class="prog-jbrw ng-binding">    6220.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbpat"><span class="prog-jbpat ng-binding">001</span></td>
+                              <td> </td>
+                              <td class="prog-jbrmh"><span class="prog-jbrmh ng-binding">       1.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbbn"><span class="prog-jbbn ng-binding"> 0</span></td>
+                              <td> </td>
+                              <td class="prog-jbfo"><span class="prog-jbfo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbfo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbbo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbbo ng-binding">555</span></td>
+                            </tr><!-- end ngRepeat: meisaiInfo in staffProgressJBoxInfos track by $index --><tr ng-repeat="meisaiInfo in staffProgressJBoxInfos track by $index" class="list-row-even">
+                              <td class="prog-boxno"><span class="prog-boxno ng-binding">5</span></td>
+                              <td> </td>
+                              <td class="prog-jbsm"><span class="prog-jbsm ng-binding">L-2</span></td>
+                              <td> </td>
+                              <td class="prog-jbedate"><span class="prog-jbedate ng-binding">26/09/21 20:20:55</span></td>
+                              <td> </td>
+                              <td class="prog-jbx"><span class="prog-jbx ng-binding">       0.800</span></td>
+                              <td> </td>
+                              <td class="prog-jby"><span class="prog-jby ng-binding">    1200.00</span></td>
+                              <td> </td>
+                              <td class="prog-jbz"><span class="prog-jbz ng-binding">       0.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbrw"><span class="prog-jbrw ng-binding">    6082.3</span></td>
+                              <td> </td>
+                              <td class="prog-jbpat"><span class="prog-jbpat ng-binding">002</span></td>
+                              <td> </td>
+                              <td class="prog-jbrmh"><span class="prog-jbrmh ng-binding">       1.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbbn"><span class="prog-jbbn ng-binding"> 0</span></td>
+                              <td> </td>
+                              <td class="prog-jbfo"><span class="prog-jbfo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbfo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbbo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbbo ng-binding">539</span></td>
+                            </tr><!-- end ngRepeat: meisaiInfo in staffProgressJBoxInfos track by $index --><tr ng-repeat="meisaiInfo in staffProgressJBoxInfos track by $index" class="list-row-odd">
+                              <td class="prog-boxno"><span class="prog-boxno ng-binding">6</span></td>
+                              <td> </td>
+                              <td class="prog-jbsm"><span class="prog-jbsm ng-binding">L-2</span></td>
+                              <td> </td>
+                              <td class="prog-jbedate"><span class="prog-jbedate ng-binding">26/09/22 04:31:00</span></td>
+                              <td> </td>
+                              <td class="prog-jbx"><span class="prog-jbx ng-binding">       0.508</span></td>
+                              <td> </td>
+                              <td class="prog-jby"><span class="prog-jby ng-binding">    1200.00</span></td>
+                              <td> </td>
+                              <td class="prog-jbz"><span class="prog-jbz ng-binding">       0.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbrw"><span class="prog-jbrw ng-binding">    6015.1</span></td>
+                              <td> </td>
+                              <td class="prog-jbpat"><span class="prog-jbpat ng-binding">003</span></td>
+                              <td> </td>
+                              <td class="prog-jbrmh"><span class="prog-jbrmh ng-binding">       1.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbbn"><span class="prog-jbbn ng-binding"> 0</span></td>
+                              <td> </td>
+                              <td class="prog-jbfo"><span class="prog-jbfo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbfo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbbo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbbo ng-binding">535</span></td>
+                            </tr><!-- end ngRepeat: meisaiInfo in staffProgressJBoxInfos track by $index --><tr ng-repeat="meisaiInfo in staffProgressJBoxInfos track by $index" class="list-row-even">
+                              <td class="prog-boxno"><span class="prog-boxno ng-binding">7</span></td>
+                              <td> </td>
+                              <td class="prog-jbsm"><span class="prog-jbsm ng-binding">CAL</span></td>
+                              <td> </td>
+                              <td class="prog-jbedate"><span class="prog-jbedate ng-binding">26/09/22 18:57:40</span></td>
+                              <td> </td>
+                              <td class="prog-jbx"><span class="prog-jbx ng-binding">       0.505</span></td>
+                              <td> </td>
+                              <td class="prog-jby"><span class="prog-jby ng-binding">    1200.00</span></td>
+                              <td> </td>
+                              <td class="prog-jbz"><span class="prog-jbz ng-binding">       0.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbrw"><span class="prog-jbrw ng-binding">    5871.5</span></td>
+                              <td> </td>
+                              <td class="prog-jbpat"><span class="prog-jbpat ng-binding">002</span></td>
+                              <td> </td>
+                              <td class="prog-jbrmh"><span class="prog-jbrmh ng-binding">       1.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbbn"><span class="prog-jbbn ng-binding"> 0</span></td>
+                              <td> </td>
+                              <td class="prog-jbfo"><span class="prog-jbfo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbfo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbbo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbbo ng-binding">0</span></td>
+                            </tr><!-- end ngRepeat: meisaiInfo in staffProgressJBoxInfos track by $index --><tr ng-repeat="meisaiInfo in staffProgressJBoxInfos track by $index" class="list-row-odd">
+                              <td class="prog-boxno"><span class="prog-boxno ng-binding">8</span></td>
+                              <td> </td>
+                              <td class="prog-jbsm"><span class="prog-jbsm ng-binding">TLV</span></td>
+                              <td> </td>
+                              <td class="prog-jbedate"><span class="prog-jbedate ng-binding">26/09/24 05:01:08</span></td>
+                              <td> </td>
+                              <td class="prog-jbx"><span class="prog-jbx ng-binding">       0.505</span></td>
+                              <td> </td>
+                              <td class="prog-jby"><span class="prog-jby ng-binding">    1198.00</span></td>
+                              <td> </td>
+                              <td class="prog-jbz"><span class="prog-jbz ng-binding">       0.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbrw"><span class="prog-jbrw ng-binding">    5718.5</span></td>
+                              <td> </td>
+                              <td class="prog-jbpat"><span class="prog-jbpat ng-binding">000</span></td>
+                              <td> </td>
+                              <td class="prog-jbrmh"><span class="prog-jbrmh ng-binding">       1.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbbn"><span class="prog-jbbn ng-binding"> 0</span></td>
+                              <td> </td>
+                              <td class="prog-jbfo"><span class="prog-jbfo ng-binding">3469</span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbfo ng-binding">0</span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbbo ng-binding">74</span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbbo ng-binding">518</span></td>
+                            </tr><!-- end ngRepeat: meisaiInfo in staffProgressJBoxInfos track by $index --><tr ng-repeat="meisaiInfo in staffProgressJBoxInfos track by $index" class="list-row-even">
+                              <td class="prog-boxno"><span class="prog-boxno ng-binding">9</span></td>
+                              <td> </td>
+                              <td class="prog-jbsm"><span class="prog-jbsm ng-binding">LS4</span></td>
+                              <td> </td>
+                              <td class="prog-jbedate"><span class="prog-jbedate ng-binding">26/09/26 14:13:33</span></td>
+                              <td> </td>
+                              <td class="prog-jbx"><span class="prog-jbx ng-binding">       0.505</span></td>
+                              <td> </td>
+                              <td class="prog-jby"><span class="prog-jby ng-binding">      39.88</span></td>
+                              <td> </td>
+                              <td class="prog-jbz"><span class="prog-jbz ng-binding">       0.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbrw"><span class="prog-jbrw ng-binding">    5133.9</span></td>
+                              <td> </td>
+                              <td class="prog-jbpat"><span class="prog-jbpat ng-binding">292</span></td>
+                              <td> </td>
+                              <td class="prog-jbrmh"><span class="prog-jbrmh ng-binding">      58.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbbn"><span class="prog-jbbn ng-binding"> 2</span></td>
+                              <td> </td>
+                              <td class="prog-jbfo"><span class="prog-jbfo ng-binding">3205</span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbfo ng-binding">90</span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbbo ng-binding">141</span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbbo ng-binding">381</span></td>
+                            </tr><!-- end ngRepeat: meisaiInfo in staffProgressJBoxInfos track by $index --><tr ng-repeat="meisaiInfo in staffProgressJBoxInfos track by $index" class="list-row-odd">
+                              <td class="prog-boxno"><span class="prog-boxno ng-binding">10</span></td>
+                              <td> </td>
+                              <td class="prog-jbsm"><span class="prog-jbsm ng-binding">KEN</span></td>
+                              <td> </td>
+                              <td class="prog-jbedate"><span class="prog-jbedate ng-binding">26/09/26 21:15:23</span></td>
+                              <td> </td>
+                              <td class="prog-jbx"><span class="prog-jbx ng-binding">       0.505</span></td>
+                              <td> </td>
+                              <td class="prog-jby"><span class="prog-jby ng-binding">      39.90</span></td>
+                              <td> </td>
+                              <td class="prog-jbz"><span class="prog-jbz ng-binding">       0.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbrw"><span class="prog-jbrw ng-binding">    5104.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbpat"><span class="prog-jbpat ng-binding">001</span></td>
+                              <td> </td>
+                              <td class="prog-jbrmh"><span class="prog-jbrmh ng-binding">      58.0</span></td>
+                              <td> </td>
+                              <td class="prog-jbbn"><span class="prog-jbbn ng-binding"> 0</span></td>
+                              <td> </td>
+                              <td class="prog-jbfo"><span class="prog-jbfo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbfo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbbo ng-binding"></span></td>
+                              <td> </td>
+                              <td class="prog-jbbo"><span class="prog-jbbo ng-binding">0</span></td>
+                            </tr><!-- end ngRepeat: meisaiInfo in staffProgressJBoxInfos track by $index -->
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </td>
+            </tr>
+            <tr>
+                <td><span class="space">*</span></td>
+            </tr>
+            <tr>
+              <td>
+                <!--品質-->
+                <table border="0" cellpadding="0" cellspacing="1">
+                  <tbody>
+                    <tr class="item-label1">
+                        <td bgcolor="white" width="40"><span>品質</span></td>
+                        <td width="80"><span>生地外観 </span></td>
+                        <td width="70"><span>ﾌﾗｯﾄﾈｽ </span></td>
+                        <td width="70"><span>付着油 </span></td>
+                        <td width="70"><span>切断面 </span></td>
+                        <td width="80"><span>板厚公差 </span></td>
+                        <td width="80"><span>巾丈公差 </span></td>
+                        <td width="70"><span>ﾗﾃﾗﾙﾎﾞｰ </span></td>
+                        <td width="70"><span>直角度 </span></td>
+                        <td width="70"><span>方向性 </span></td>
+                        <td width="50"><span>強度 </span></td>
+                        <td width="50"><span>ｱﾙﾏｲﾄ </span></td>
+                        <td width="50"><span>表面 </span></td>
+                        <td bgcolor="white" width="20"><span>歩</span></td>
+                        <td width="70"><span>設計 </span></td>
+                        <td width="70"><span>実績 </span></td>
+                        <td width="70"><span>対比 </span></td>
+                        <td bgcolor="white" width="5"></td>
+                        <td><span>品質異常 </span></td>
+                        <td class=" cf-item-g2-value3" colspan="3" width="280"><span class="ng-binding"></span></td>
+                        <td><span>引当</span></td>
+                        <td class=" cf-item-g3-value2"><span class="ng-binding"></span></td>
+                    </tr>
+                    <tr class=" item-value1">
+                        <td bgcolor="white" width="40"><span>等級 </span></td>
+                        <td><span class="ng-binding">4D</span></td>
+                        <td><span class="ng-binding">4 </span></td>
+                        <td><span class="ng-binding">3 </span></td>
+                        <td><span class="ng-binding">3 </span></td>
+                        <td><span class="ng-binding">4 </span></td>
+                        <td><span class="ng-binding">3 </span></td>
+                        <td><span class="ng-binding">3 </span></td>
+                        <td><span class="ng-binding">. </span></td>
+                        <td><span class="ng-binding">4 </span></td>
+                        <td><span class="ng-binding">3 </span></td>
+                        <td><span class="ng-binding">. </span></td>
+                        <td><span class="ng-binding">S </span></td>
+                        <td bgcolor="white" width="20"><span>留</span></td>
+                        <td align="right"><span class="ng-binding">77.982</span></td>
+                        <td align="right"><span class="ng-binding">71.485</span></td>
+                        <td align="right"><span class="ng-binding">91.668</span></td>
+                        <td bgcolor="white" width="5"></td>
+                        <td class="item-label1"><span>引当状態 </span></td>
+                        <td class=" cf-item-g2-value3" width="100"><span class="ng-binding">* ｶﾝﾘﾖｳ  *</span></td>
+                        <td class="cf-item-label5"><span>保留</span></td>
+                        <td class=" cf-item-g2-value3" width="100"><span class="ng-binding">           </span></td>
+                        <td class="cf-item-label5"><span>仮梱</span></td>
+                        <td class=" cf-item-g3-value2"><span class="ng-binding"></span></td>
+                        <td class="cf-item-label5"><span>ｺｰﾄﾞ</span></td>
+                        <td class="cf-item-g2-value8" width="40"><span class="ng-binding">10</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </td>
+            </tr>
+            <tr>
+                <td><span class="space">*</span></td>
+            </tr>
+            <tr>
+              <td>
+                <!--公差～時効-->
+                <table border="0" cellpadding="0" cellspacing="1">
+                  <tbody>
+                    <tr class="item-label1">
+                        <!--公差-->
+                        <td bgcolor="white" width="70"><span>公差</span></td>
+                        <td width="80"><span>ｵｰﾀﾞｰ(+)</span></td>
+                        <td width="80"><span>ｵｰﾀﾞｰ(-)</span></td>
+                        <td width="70"><span>製造(+)</span></td>
+                        <td width="70"><span>製造(-)</span></td>
+                        <!--寸法-->
+                        <td bgcolor="white" width="40"><span>寸法</span></td>
+                        <td width="65"><span>ｵｰﾀﾞｰ</span></td>
+                        <td width="65"><span>製造</span></td>
+                        <!--重量内訳-->
+                        <td bgcolor="white"><span>重</span></td>
+                        <td width="70"><span>全良品</span></td>
+                        <td class=" cf-item-g2-value4" width="60"><span class="ng-binding">5104</span></td>
+                        <!--重量-->
+                        <td bgcolor="white"><span>重</span></td>
+                        <td width="70"><span>投入量</span></td>
+                        <td class=" cf-item-g2-value4" width="90"><span class="ng-binding">7140.0</span></td>
+                        <!--工場外注-->
+                        <td bgcolor="white"><span>工</span></td>
+                        <td width="20"><span>No </span></td>
+                        <td width="50"><span>G設備 </span></td>
+                        <td width="250"><span>外注先名 </span></td>
+                        <td width="80"><span>手配日 </span></td>
+                        <td width="250"><span>送り先名 </span></td>
+                        <!--時効-->
+                        <td bgcolor="white" rowspan="2"><span>時</span></td>
+                        <td width="75"><span>自然時効 </span></td>
+                        <td class=" cf-item-g2-value8" width="50"><span class="ng-binding"></span></td>
+                        <td bgcolor="white" width="100"></td>
+                    </tr>
+                    <tr class=" item-value1">
+                        <!--公差-->
+                        <td class="cf-item-label5"><span>板厚公差</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding">(  0.015)</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding">(  0.015)</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding">0.010</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding">0.020</span></td>
+                        <!--寸法-->
+                        <td class="cf-item-label10"><span>板厚</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding">0.500</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding">0.505</span></td>
+                        <!--重量内訳-->
+                        <td bgcolor="white"><span>量</span></td>
+                        <td class="cf-item-label5"><span>ｽﾎﾟｯﾄ</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding">0</span></td>
+                        <!--重量-->
+                        <td bgcolor="white"><span>量</span></td>
+                        <td class="cf-item-label5"><span>設計単重</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding">100.01896</span></td>
+                        <!--工場外注-->
+                        <td bgcolor="white"><span>場</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding"></span></td>
+                        <td><span class="ng-binding"></span></td>
+                        <td><span class="ng-binding"></span></td>
+                        <td><span class="ng-binding"></span></td>
+                        <td><span class="ng-binding"></span></td>
+                        <!--時効-->
+                        <td class="cf-item-label5"><span>自然残日</span></td>
+                        <td class=" cf-item-g2-value8" width="160" colspan="2"><span ng-style="staffProgressJikoData.css" class="ng-binding"></span></td>
+                        <td class=" cf-item-g2-value8" width="50"><span ng-style="staffProgressJikoData.css" class="ng-binding"></span></td>
+                        <td class=" cf-item-g2-value8" width="60"><span ng-style="staffProgressJikoData.css" class="ng-binding"></span></td>
+                    </tr>
+                    <tr class=" item-value1">
+                        <!--公差-->
+                        <td class="cf-item-label5"><span>板幅公差</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding">(  0.0)</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding">(  0.2)</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding">0.1</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding">0.1</span></td>
+                        <!--寸法-->
+                        <td class="cf-item-label10"><span>板幅</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding">40.00</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding">39.90</span></td>
+                        <!--重量内訳-->
+                        <td bgcolor="white"><span>内</span></td>
+                        <td class="cf-item-label5"><span>ｽﾄｱ</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding">0</span></td>
+                        <!--重量-->
+                        <td bgcolor="white"><span></span></td>
+                        <td class="cf-item-label5"><span>ICAS倉入</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding">5104</span></td>
+                        <!--工場外注-->
+                        <td bgcolor="white"><span>外</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding"></span></td>
+                        <td><span class="ng-binding"></span></td>
+                        <td><span class="ng-binding"></span></td>
+                        <td><span class="ng-binding"></span></td>
+                        <td><span class="ng-binding"></span></td>
+                        <!--時効-->
+                        <td bgcolor="white" rowspan="2"><span>効</span></td>
+                        <td class="cf-item-label5"><span>QF完了日</span></td>
+                        <td class=" cf-item-g2-value8" width="160" colspan="2"><span class="ng-binding"></span></td>
+                    </tr>
+                    <tr class=" item-value1">
+                        <!--公差-->
+                        <td class="cf-item-label5"><span>板丈公差</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding"></span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding"></span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding"></span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding"></span></td>
+                        <!--寸法-->
+                        <td class="cf-item-label10"><span>板丈</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding">0.0</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding">0.0</span></td>
+                        <!--重量内訳-->
+                        <td bgcolor="white"><span>訳</span></td>
+                        <td class="cf-item-label5"><span>倉入重量</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding">5104</span></td>
+                        <!--重量-->
+                        <td bgcolor="white"><span></span></td>
+                        <td bgcolor="white"><span></span></td>
+                        <td bgcolor="white"><span></span></td>
+                        <!--工場外注-->
+                        <td bgcolor="white"><span>注</span></td>
+                        <td class=" cf-item-g2-value4"><span class="ng-binding"></span></td>
+                        <td><span class="ng-binding"></span></td>
+                        <td><span class="ng-binding"></span></td>
+                        <td><span class="ng-binding"></span></td>
+                        <td><span class="ng-binding"></span></td>
+                        <!--時効-->
+                        <td class="cf-item-label5"><span>焼鈍開始</span></td>
+                        <td class=" cf-item-g2-value8" width="160" colspan="2"><span class="ng-binding"></span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+    </div>
+
+    <input id="form1_hidden" name="form1_hidden" value="form1_hidden" type="hidden">
+    <!-- ICAS情報タブ以外の共通部分 終了-->
+    </form>
+
+</div>
+
+    <!--
+    <nis-footer></nis-footer>
+    -->
+
+    <div id="toast-container" ng-class="[config.position, config.animation]" toaster-options="{&#39;time-out&#39;: 5000, &#39;close-button&#39;:true, &#39;position-class&#39;:&#39;toast-bottom-right&#39;}" class="ng-scope toast-bottom-right"><!-- ngRepeat: toaster in toasters --></div>
+
+    <!-- nis-util.js -->
+    <!-- app.js -->
+    <!-- =================================================== common ================================================== -->
+
+    <!-- 	authority -->
+    <!-- 	constants -->
+    <!-- 	configs -->
+    <!-- 	animations -->
+
+    <!-- 	alert -->
+    <!-- 	collapse -->
+    <!-- 	capture -->
+    <!-- 	chart -->
+    <!-- 	disabled -->
+    <!-- 	exists -->
+    <!-- 	filters -->
+    <!-- 	focus -->
+    <!-- 	grid -->
+    <!-- 	icon -->
+    <!-- 	jquery -->
+    <!-- 	interceptor -->
+    <!-- 	lazyloadscroll -->
+    <!-- 	list -->
+    <!-- 	modal -->
+    <!-- 	model -->
+    <!-- 	options -->
+    <!-- 	radio -->
+    <!-- 	required -->
+    <!-- 	rules -->
+    <!-- 	ScopeSetupService -->
+    <!-- 	select -->
+    <!-- 	share -->
+    <!-- sidebar -->
+    <!-- util -->
+	<!-- validators -->
+    <!-- back to top -->
+    <!-- //develop//  -->
+    <!--
+    -->
+
+    <!--
+	-->
+
+    <!-- 	events //-->
+    <!-- =================================================== main ================================================== -->
+
+    <!-- const -->
+    <!-- common -->
+    <!-- pdf open -->
+    <!-- direct print -->
+    <!-- user -->
+    <!-- header -->
+    <!-- footer -->
+    <!-- home -->
+    <!-- login -->
+    <!-- change password -->
+    <!-- =========================================== 共通一覧モーダル系 ============================== -->
+
+    <!-- 担当者 -->
+    <!-- =========================================== 包装仕様書 ============================================ -->
+    <!-- 包装仕様書 -->
+    <!-- 包装仕様書閲覧(営業) -->
+    <!-- 包装仕様書印刷(営業) -->
+    <!-- 包装仕様書閲覧(現場) -->
+    <!-- 包装仕様書閲覧(現場)トップ -->
+    <!-- 包装仕様書（現場） コメント -->
+    <!-- =========================================== Webﾛｯﾄ問合せｼｽﾃﾑ ============================================ -->
+
+     <!-- Webロット問合せ共通モジュール -->
+     <!-- 認証サービス -->
+     <!-- メニュー画面 -->
+     <!-- ICAS情報画面 -->
+     <!-- 進度情報画面 -->
+     <!-- 製造情報画面 -->
+     <!-- 試験情報画面 -->
+     <!-- 品質情報画面 -->
+     <!-- クラッド情報画面 -->
+     <!-- 焼鈍情報画面 -->
+     <!-- 引当情報画面 -->
+     <!-- 共通検索 -->
+     <!-- エラー画面 -->
+     <!-- バージョン -->
+     <input type="hidden" value="version 1.6">
+
+
+</body></html>

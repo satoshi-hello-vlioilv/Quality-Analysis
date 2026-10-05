@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LotDsp 項目の紐づけ — {{ brand.name }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/lotdsp-link.css') }}">
+</head>
+<body class="link-page">
+<header class="lk-bar">
+  <div><small>QUALITY ANALYSIS ・ 調査の道具</small><h1>LotDsp 項目の紐づけ</h1></div>
+  <a class="lk-back" href="/">← アプリへ戻る</a>
+</header>
+
+<main class="lk-main">
+  <p class="lk-lead">LotDsp の API が返す項目（<code>staffTestBean.kei_CU</code> など）が、画面のどの見出しなのかを、<b>同じロットの値の一致</b>で調べます。
+    出力は「項目 ↔ 見出し」だけで、<b>値は含まれません</b>（そのまま貼って見せられます）。</p>
+
+  <ol class="lk-steps">
+    <li><b>1</b><div><h2>画面を保存する</h2>
+      <p>LotDsp で調べたいタブを開き、右クリック →「名前を付けて保存」で HTML を保存します。<b>タブごと</b>に1つです。</p></div></li>
+    <li><b>2</b><div><h2>ロット違いも保存する</h2>
+      <p>同じタブを<b>別のロットでもう1つ</b>保存すると、偶然の一致が消えて、見出しが確定します。</p></div></li>
+    <li><b>3</b><div><h2>ここで選んで照合する</h2>
+      <p>保存した HTML を<b>まとめて</b>選びます。このアプリが同じロットの API を引いて、値を照らします。</p></div></li>
+  </ol>
+
+  <section class="lk-pick" id="pick">
+    <label class="lk-drop" id="drop" for="files">
+      <input id="files" type="file" accept=".html,.htm,text/html" multiple>
+      <span class="lk-drop-main">保存した HTML を選ぶ（まとめて選べます・ここへドラッグでも）</span>
+      <span class="lk-drop-sub">LotDsp の画面だけを渡します。ファイルはこのアプリの中でだけ使い、保存しません。</span>
+    </label>
+    <ul class="lk-files" id="fileList" aria-live="polite"></ul>
+    <div class="lk-run">
+      <button type="button" id="run" class="lk-primary" disabled>照合する</button>
+      <button type="button" id="clear" class="lk-ghost" hidden>選び直す</button>
+      <span class="lk-state" id="state" role="status"></span>
+    </div>
+  </section>
+
+  <section class="lk-result" id="result" hidden aria-live="polite">
+    <div class="lk-sum" id="sum"></div>
+    <div class="lk-next" id="next"></div>
+    <div class="lk-tools">
+      <span class="lk-seg" id="tabSeg" role="radiogroup" aria-label="タブ"></span>
+      <label class="lk-check"><input type="checkbox" id="onlyNew"> 使っていない項目だけ</label>
+      <input type="search" id="q" placeholder="見出し・項目で絞り込み" aria-label="絞り込み" autocomplete="off">
+      <button type="button" id="copy" class="lk-ghost">貼り付け用にコピー</button>
+    </div>
+    <div class="lk-tablewrap"><table class="lk-table"><thead><tr><th>状態</th><th>画面の見出し</th><th>応答の項目（道すじ）</th><th>いまの用途</th></tr></thead><tbody id="rows"></tbody></table></div>
+    <details class="lk-only" id="onlyScreen"></details>
+  </section>
+
+  <section class="lk-pick lk-survey" aria-labelledby="svTitle">
+    <h2 id="svTitle">応答に入っている項目の一覧</h2>
+    <p class="lk-lead">ロット番号で LotDsp の API を1回引き、応答に入っている項目をすべて（道すじ・型・形・空でない件数・このアプリが使っているか）一覧にします。
+      既定は形だけ（数字は 9・英字は a）で、<b>値は含みません</b>。何も覚えず、何も書き換えません。</p>
+    <div class="lk-run">
+      <input id="svLot" class="lk-lot" type="text" placeholder="ロット番号（例: L7150C0）" aria-label="ロット番号" spellcheck="false" autocomplete="off">
+      <label class="lk-check"><input type="checkbox" id="svValues"> 値も出す（この PC で見るだけ。外へ渡さない）</label>
+      <button type="button" id="svRun" class="lk-primary">一覧にする</button>
+      <button type="button" id="svCopy" class="lk-ghost" hidden>コピー</button>
+      <span class="lk-state" id="svState" role="status"></span>
+    </div>
+    <pre class="lk-survey-out" id="svOut" hidden></pre>
+  </section>
+</main>
+<script src="{{ url_for('static', filename='js/shared.js') }}"></script>
+<script src="{{ url_for('static', filename='js/lotdsp-link.js') }}"></script>
+</body>
+</html>
