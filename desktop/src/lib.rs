@@ -4,3 +4,4 @@ pub mod lot;
 pub mod lotlist;
 pub mod mirror;
 pub mod pyfmt;
+pub mod release;

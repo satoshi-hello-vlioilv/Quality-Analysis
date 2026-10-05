@@ -262,7 +262,7 @@ fn start(app: AppHandle, slot: Arc<OnceLock<AppRouter>>, splash: Arc<Splash>) {
         Err(e) => return splash.fail(&app, "アプリの中身が見つかりません", &e),
     };
     splash.step(&app, "program", "ok", &program.display().to_string());
-    let py = match locate::python(&program) {
+    let py = match locate::python() {
         Ok(p) => p,
         Err(e) => {
             splash.step(&app, "python", "bad", "見つかりません");

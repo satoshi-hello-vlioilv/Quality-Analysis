@@ -92,13 +92,36 @@ pub struct Python {
 }
 
 /// Python を探す。見つからなければ、探した場所を添えて誤り。
-pub fn python(program: &Path) -> Result<Python, String> {
+pub fn python() -> Result<Python, String> {
     let path: Vec<PathBuf> = env::var_os("PATH").map(|p| env::split_paths(&p).collect()).unwrap_or_default();
-    let cands = python_candidates(env::var_os("TPA_PYTHON").map(PathBuf::from), program, &path);
+    let cands = python_candidates(env::var_os("TPA_PYTHON").map(PathBuf::from), &path);
     cands.iter().find(|c| exists(&c.exe)).cloned().ok_or_else(|| {
         let tried: Vec<String> = cands.iter().map(|c| format!("  {}", c.exe.display())).collect();
-        format!("Python が見つかりません。\n探した場所:\n{}", tried.join("\n"))
+        let stubs: Vec<String> =
+            path.iter().filter(|d| is_store_stub(d)).map(|d| format!("  {}", d.join("python.exe").display())).collect();
+        let stub_note = if stubs.is_empty() {
+            String::new()
+        } else {
+            format!("\nMicrosoft Store の入口だけがあり、Python は入っていません（使いません）:\n{}", stubs.join("\n"))
+        };
+        format!("Python が見つかりません。\n探した場所:\n{}{stub_note}", tried.join("\n"))
     })
+}
+
+/// Microsoft Store の「入口だけ」（Python を入れていない PC にもある WindowsApps\python.exe。起こすと Store の画面が開くだけ）か。
+/// 実行せずに見分ける: WindowsApps のフォルダに Store 版の Python の本体（PythonSoftwareFoundation.Python.3.*）が無ければ入口だけ。
+/// Store 版の Python が入っていれば、その入口は本物の Python を子として起こす（本物の PID は起動の合図で受け取る・proc.rs）。
+pub fn is_store_stub(dir: &Path) -> bool {
+    let is_apps = dir.file_name().is_some_and(|n| n.to_string_lossy().eq_ignore_ascii_case("WindowsApps"));
+    if !is_apps || !exists(&dir.join("python.exe")) {
+        return false;
+    }
+    let installed = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .any(|e| e.file_name().to_string_lossy().to_ascii_lowercase().starts_with("pythonsoftwarefoundation.python.3"));
+    !installed
 }
 
 /// 在るか。**リンクをたどらずに**見る（Microsoft Store 版の入口 WindowsApps の python.exe は、たどると「無い」と答えることがある）。
@@ -106,29 +129,19 @@ fn exists(p: &Path) -> bool {
     std::fs::symlink_metadata(p).is_ok()
 }
 
-/// 同梱の Python の exe（配る形は program と並ぶ python フォルダ）。
-pub fn bundled_python(dir: &Path) -> PathBuf {
-    if cfg!(windows) {
-        dir.join("python").join("python.exe")
-    } else {
-        dir.join("python").join("bin").join("python3")
-    }
-}
-
-/// 探す順（先にあるほど優先）: TPA_PYTHON（開発と CI）→ **同梱の Python**（program の隣。配る形）→
-/// PATH を前から見て最初に pythonw.exe がある場所の python.exe（いつも同じ Python を使う）→ PATH の python.exe → py ランチャー。
-pub fn python_candidates(given: Option<PathBuf>, program: &Path, path: &[PathBuf]) -> Vec<Python> {
+/// 探す順（先にあるほど優先）: TPA_PYTHON（開発と CI）→ PATH を前から見て最初に pythonw.exe がある場所の python.exe
+/// （いつも同じ Python を使う）→ PATH の python.exe → py ランチャー。Python は各ユーザーが PC に入れる（同梱しない）。
+/// Microsoft Store の入口だけ（Python は入っていない）のフォルダは飛ばす（is_store_stub）。
+pub fn python_candidates(given: Option<PathBuf>, path: &[PathBuf]) -> Vec<Python> {
     let plain = |exe: PathBuf| Python { exe, args: vec![] };
     let mut out = Vec::new();
     if let Some(p) = given {
         out.push(plain(p));
     }
-    if let Some(root) = program.parent() {
-        out.push(plain(bundled_python(root)));
-    }
     if cfg!(windows) {
-        out.extend(path.iter().filter(|d| exists(&d.join("pythonw.exe"))).map(|d| plain(d.join("python.exe"))));
-        out.extend(path.iter().map(|d| plain(d.join("python.exe"))));
+        let usable: Vec<&PathBuf> = path.iter().filter(|d| !is_store_stub(d)).collect();
+        out.extend(usable.iter().filter(|d| exists(&d.join("pythonw.exe"))).map(|d| plain(d.join("python.exe"))));
+        out.extend(usable.iter().map(|d| plain(d.join("python.exe"))));
         let windir = env::var_os("WINDIR").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(r"C:\Windows"));
         out.push(Python { exe: windir.join("py.exe"), args: vec!["-3".into()] });
     } else {
@@ -174,16 +187,30 @@ mod tests {
     }
 
     #[test]
-    fn given_then_bundled_then_path() {
+    fn given_then_path() {
         let a = PathBuf::from("/opt/a");
         let b = PathBuf::from("/opt/b");
-        let program = PathBuf::from("/app/program");
-        let c = python_candidates(Some(PathBuf::from("/given/python")), &program, &[a.clone(), b.clone()]);
+        let c = python_candidates(Some(PathBuf::from("/given/python")), &[a.clone(), b.clone()]);
         assert_eq!(c[0].exe, PathBuf::from("/given/python"), "指定された Python（TPA_PYTHON）が先");
-        assert_eq!(c[1].exe, bundled_python(Path::new("/app")), "次に program の隣の同梱の Python");
         if !cfg!(windows) {
-            assert_eq!(c[2].exe, a.join("python3"), "PATH の順は並べ替えない（いつも同じ Python）");
-            assert_eq!(c[3].exe, b.join("python3"));
+            assert_eq!(c[1].exe, a.join("python3"), "PATH の順は並べ替えない（いつも同じ Python）");
+            assert_eq!(c[2].exe, b.join("python3"));
         }
+    }
+
+    #[test]
+    fn store_stub_is_told_apart_without_running_it() {
+        let tmp = env::temp_dir().join(format!("da-store-{}", std::process::id()));
+        let apps = tmp.join("Microsoft").join("WindowsApps");
+        std::fs::create_dir_all(&apps).unwrap();
+        std::fs::write(apps.join("python.exe"), "").unwrap();
+        assert!(is_store_stub(&apps), "Store の入口だけ（Python は入っていない）");
+        std::fs::create_dir_all(apps.join("PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0")).unwrap();
+        assert!(!is_store_stub(&apps), "Store 版の Python が入っていれば使う");
+        let other = tmp.join("Python313");
+        std::fs::create_dir_all(&other).unwrap();
+        std::fs::write(other.join("python.exe"), "").unwrap();
+        assert!(!is_store_stub(&other), "ふつうの Python のフォルダ");
+        std::fs::remove_dir_all(&tmp).ok();
     }
 }

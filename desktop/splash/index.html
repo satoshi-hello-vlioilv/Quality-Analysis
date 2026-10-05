@@ -68,7 +68,7 @@
     <span id="lead">準備ができたら、この窓がそのままアプリに切り替わります。</span>
     <ol>
       <li class="now" id="s-program"><span class="mark"></span><span><span class="t">アプリの中身を探す</span><span class="d">exe と並ぶ program フォルダ</span></span></li>
-      <li class="wait" id="s-python"><span class="mark"></span><span><span class="t">Python を探す</span><span class="d">配られた形に同梱の Python</span></span></li>
+      <li class="wait" id="s-python"><span class="mark"></span><span><span class="t">Python を探す</span><span class="d">この PC に入れた Python（PATH・Microsoft Store 版も）</span></span></li>
       <li class="wait" id="s-backend"><span class="mark"></span><span><span class="t">アプリの中身を起こす</span><span class="d">計算・LotDsp・マスタ（ポートは使いません）</span></span></li>
       <li class="wait" id="s-open"><span class="mark"></span><span><span class="t">画面を開く</span><span class="d"></span></span></li>
     </ol>
@@ -85,8 +85,9 @@
   /* よくある理由 → 次にすること（理由の文から見分ける。当てはまらなければ理由だけ出す） */
   const HINTS = [
     [/program フォルダ|sidecar\.py/, "配られた ZIP を展開したフォルダの exe から開いてください（exe と program フォルダが並んでいる形）。"],
-    [/Python が見つかりません/, "配られた ZIP に入っている python フォルダが exe の隣にあるか確かめてください。無ければ ZIP を展開し直してください。"],
-    [/No module named/, "同梱の Python の部品が欠けています。配られた ZIP を展開し直してから開いてください。"],
+    [/Microsoft Store の入口だけ/, "Python が入っていません。Microsoft Store の「Python 3.13」か、python.org のインストーラー（「Add python.exe to PATH」に印を付ける）で入れてから、開き直してください。"],
+    [/Python が見つかりません/, "Python を入れてから開き直してください（Microsoft Store の「Python 3.13」か、python.org のインストーラーで「Add python.exe to PATH」に印を付ける）。"],
+    [/No module named/, "Python の標準の部品が欠けています。Python を入れ直してから開いてください。"],
     [/版が食い違/, "窓とアプリの中身の組がずれています。配られた ZIP を展開し直してから開いてください。"],
     [/秒たっても準備できません/, "PC が混んでいるか、共有フォルダへの接続で止まっています。少し待ってから開き直してください。"],
   ];
