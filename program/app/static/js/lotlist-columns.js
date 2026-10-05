@@ -7,8 +7,10 @@
      画面に出すのは {...saved, ...draft, ...live}（キーごとに上書き）。
    - 入口: 「表示列」の窓（出す列・並び・表示名・幅・揃え・値の整え方・保存した設定・書き出し/読み込み・既定に戻す）、
            見出し（ドラッグで並べ替え・右端の取っ手で幅・ダブルクリックで自動）、見出しの右クリック（隠す・幅・色・隠した列）、
-           「表の見せ方」（行間・表示件数）。
-   - ロット番号の列は、押して検索する列なのでいつも先頭に出し、隠せない。
+           「表の見せ方」（行間・セルの余白・入り切らない文字・左に固定する列・表示件数）。
+   - 列の並びに決まりは無い（ロット番号の列もどこへでも動かせる）。まだ並べていない表だけ、ロット番号を先頭に出す。
+     ロット番号の列は押して検索する列なので、隠せない。
+   - 左に固定する列は「先頭から n 列」（並べ替えた結果の先頭。ロット番号に限らない）。
    - 覚える場所はこの PC（localStorage）。色は WaveLog と同じく一時的な目印（sessionStorage）。
    ========================================================================= */
 (function () {
@@ -20,10 +22,13 @@
     tint: "tpa.lotlist.tint.v1",
     rowGap: "tpa.lotlist.rowGap.v1",
     rect: "tpa.lotlist.colPanelRect.v1",
+    cellPad: "tpa.lotlist.cellPad.v1",     // セルの左右の余白（px）
+    overflow: "tpa.lotlist.overflow.v1",   // 入り切らない文字: ellipsis（…で切る）／clip（記号なしで切る）／wrap（折り返す）
+    freeze: "tpa.lotlist.freeze.v1",       // 左に固定する列の数（先頭から）
   };
   const KEYS = ["order", "hidden", "widths", "locks", "names", "formats", "aligns", "formulas", "rules"];
   const empty = () => ({ order: [], hidden: [], widths: {}, locks: [], names: {}, formats: {}, aligns: {}, formulas: {}, rules: {} });
-  const W_MIN = 40, W_MAX = 900, AUTO_MIN = 52, AUTO_MAX = 320, GRIP_SETTLE_MS = 300;
+  const W_MIN = 20, W_MAX = 900, AUTO_MIN = 30, AUTO_MAX = 320, GRIP_SETTLE_MS = 300;
   const TINTS = [
     ["gray", "灰", "#8a96a0", "目立たせない"], ["stone", "石", "#a39585", "参考"], ["teal", "青緑", "#2f7d78", "転写・注目"],
     ["aqua", "水", "#3aa6b9", "確認中"], ["blue", "青", "#3a78c2", "情報"], ["indigo", "藍", "#3f5a91", "入力"],
@@ -130,7 +135,8 @@
     const l = get(t), known = new Set(cols);
     const out = l.order.filter((c) => known.has(c));
     cols.forEach((c) => { if (!out.includes(c)) out.push(c); });     // 新しい列は後ろへ
-    if (lotCol && out.includes(lotCol)) { out.splice(out.indexOf(lotCol), 1); out.unshift(lotCol); }   // ロット番号はいつも先頭
+    // ロット番号は、まだ並べていない（並びに入っていない）ときだけ先頭へ。並べたあとは置いた場所のまま
+    if (lotCol && out.includes(lotCol) && !l.order.includes(lotCol)) { out.splice(out.indexOf(lotCol), 1); out.unshift(lotCol); }
     return out;
   }
   function visible(t, cols, lotCol) {
@@ -206,8 +212,10 @@
     const font = '13.5px "Yu Gothic UI","Meiryo UI",sans-serif', hfont = '700 13px "Yu Gothic UI","Meiryo UI",sans-serif';
     const ws = rows.slice(0, 40).map((r) => textWidth(cell(t, c, r).text, font)).sort((a, b) => a - b);
     const p90 = ws.length ? ws[Math.min(ws.length - 1, Math.floor(ws.length * 0.9))] : 0;
-    const head = textWidth(label(t, c), hfont) + 26;
-    return Math.round(Math.min(AUTO_MAX, Math.max(AUTO_MIN, Math.max(p90, head) + 20 + 6)));
+    // 余白はいまのセルの余白（左右）。見出しは並べ替えの印のぶん少し足す。+4 は字の端の丸め（ここを詰めると「…」が出やすい）
+    const pad = cellPad() * 2;
+    const head = textWidth(label(t, c), hfont) + pad + 10;
+    return Math.round(Math.min(AUTO_MAX, Math.max(AUTO_MIN, Math.max(p90 + pad + 4, head))));
   }
   function widthOf(t, c, rows) { const w = get(t).widths[c]; return w ? w : estimate(t, c, rows); }
 
@@ -231,6 +239,34 @@
   const rowGap = () => Math.min(5, Math.max(1, +LS.get(KEY.rowGap, 3) || 3));
   function setRowGap(n) { LS.set(KEY.rowGap, n); }
   const rowPad = () => GAP[rowGap() - 1][1];
+
+  /* ================= セルの余白・入り切らない文字・左に固定する列（この PC） =================
+     列を狭めると出る「…」は、字の幅＋左右の余白が列の幅を超えたところで出る。余白を詰める・記号を出さずに切る（記号のぶん
+     1〜2字多く見える）・折り返す、のどれかで、もう少し詰めても読めるようにする。 */
+  const PAD_MAX = 14, PAD_DEFAULT = 10, FREEZE_MAX = 4;
+  const OVERFLOWS = [["ellipsis", "「…」で切る", "入り切らない字を「…」に替えます（元の値はマウスを乗せると出ます）"],
+    ["clip", "記号なしで切る", "「…」を出さずに列の端で切ります（記号のぶん1〜2字多く見えます）"],
+    ["wrap", "折り返して全部出す", "入り切らない字を次の行へ折り返します（行が高くなります）"]];
+  const cellPad = () => { const v = +LS.get(KEY.cellPad, PAD_DEFAULT); return Number.isFinite(v) ? Math.min(PAD_MAX, Math.max(0, v)) : PAD_DEFAULT; };
+  const setCellPad = (n) => LS.set(KEY.cellPad, Math.min(PAD_MAX, Math.max(0, Math.round(+n || 0))));
+  const overflow = () => { const v = LS.get(KEY.overflow, "ellipsis"); return OVERFLOWS.some((o) => o[0] === v) ? v : "ellipsis"; };
+  const setOverflow = (v) => LS.set(KEY.overflow, v);
+  const freeze = () => { const v = +LS.get(KEY.freeze, 1); return Number.isFinite(v) ? Math.min(FREEZE_MAX, Math.max(0, v)) : 1; };
+  const setFreeze = (n) => LS.set(KEY.freeze, Math.min(FREEZE_MAX, Math.max(0, Math.round(+n || 0))));
+  /* 先頭から n 列を左に固定する CSS（列の幅の和で left を決める）。背景は :where で弱くし、行の縞・ホバーの色を活かす */
+  function freezeCss(scope, widths) {
+    const n = Math.min(freeze(), widths.length);
+    let left = 0, css = "";
+    for (let i = 0; i < n; i++) {
+      const k = i + 1, last = i === n - 1;
+      css += `${scope} th:nth-child(${k}),${scope} td:nth-child(${k}){position:sticky;left:${left}px}`
+        + `${scope} tbody td:nth-child(${k}){z-index:1}${scope} thead th:nth-child(${k}){z-index:3}`
+        + `:where(${scope}) tbody td:nth-child(${k}){background-color:var(--surface)}`
+        + (last ? `${scope} th:nth-child(${k}),${scope} td:nth-child(${k}){box-shadow:1px 0 0 var(--line)}` : "");
+      left += widths[i];
+    }
+    return css;
+  }
 
   /* ================= 見出しの操作（ドラッグで並べ替え・取っ手で幅・右クリック） ================= */
   let ctx = null;             // { target, columns, rows, lotColumn, rerender(), grid }
@@ -266,15 +302,15 @@
       const widths = Object.assign({}, l.widths); delete widths[c];
       patch(ctx.target, { widths }); ctx.rerender();
     });
-    // ドラッグで並べ替え（ロット番号の列は先頭のまま）
+    // ドラッグで並べ替え（どの列もどこへでも。ロット番号の列も）
     let dragCol = null;
     thead.addEventListener("dragstart", (e) => {
-      const th = e.target.closest("th[data-col]"); if (!th || th.classList.contains("ll-lotcol")) { e.preventDefault(); return; }
+      const th = e.target.closest("th[data-col]"); if (!th || e.target.closest(".col-resize")) { e.preventDefault(); return; }
       dragCol = th.dataset.col; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dragCol);
       th.classList.add("is-dragging");
     });
     thead.addEventListener("dragover", (e) => {
-      const th = e.target.closest("th[data-col]"); if (!th || !dragCol || th.classList.contains("ll-lotcol")) return;
+      const th = e.target.closest("th[data-col]"); if (!th || !dragCol) return;
       e.preventDefault();
       const r = th.getBoundingClientRect(), after = e.clientX > r.left + r.width / 2;
       $$("th", thead).forEach((x) => x.classList.remove("col-drop-before", "col-drop-after"));
@@ -326,6 +362,9 @@
     m.className = "ll-colmenu"; m.setAttribute("role", "menu");
     m.innerHTML = `<p class="cm-head">${esc(label(t, c))}</p>`
       + `<button type="button" data-a="hide"${isLot ? ' disabled title="ロット番号の列は押して検索するので隠せません"' : ""}>この列を隠す</button>`
+      + (ctx.levels && ctx.levels.can(c) ? (ctx.levels.has(c)
+        ? '<button type="button" data-a="ungroup" title="この列でまとめるのをやめます（ほかの段はそのまま）">この列のまとめを外す</button>'
+        : `<button type="button" data-a="group" title="この列の値が同じ行を続けて並べ、まとめます（いまの段の下に足します）">この列でまとめる（${ctx.levels.count() + 1}段目に足す）</button>`) : "")
       + `<p class="cm-label">幅: ${mode}</p>`
       + `<button type="button" data-a="auto">幅を内容に合わせる（自動）</button>`
       + `<button type="button" data-a="lock">${l.locks.includes(c) ? "幅の固定を解く" : "いまの幅で固定する"}</button>`
@@ -362,6 +401,7 @@
       else if (b.dataset.show) patch(t, { hidden: L.hidden.filter((k) => k !== b.dataset.show) });
       else if (a === "showAll") patch(t, { hidden: [] });
       else if (a === "panel") { closeMenu(); openPanel(); return; }
+      else if (a === "group" || a === "ungroup") { closeMenu(); if (a === "group") ctx.levels.add(c); else ctx.levels.remove(c); return; }
       closeMenu(); ctx.rerender();
     });
     requestAnimationFrame(() => $("button:not(:disabled)", m)?.focus());
@@ -409,7 +449,7 @@
         <button type="button" id="lcSave" class="lc-primary">保存</button>
       </div>`;
     document.body.append(panel);
-    win = TPA.floatPanel(panel, { key: KEY.rect, w: 1240, h: 780, top: 40 });   // 見出しで動かす・右下で大きさ。この PC に覚える
+    win = TPA.floatPanel(panel, { key: KEY.rect, w: 1240, h: 780, top: 40, minW: 820, minH: 460 });   // 見出しで動かす・4辺と4隅で大きさ。この PC に覚える
     win.place();
     bindPanel();
     return panel;
@@ -463,8 +503,8 @@
       const smp = v == null ? '<em class="lc-none">（値のある行がありません）</em>'
         : (shown !== String(v) ? `<s>${esc(v)}</s> ${esc(shown)}` : esc(shown));
       return `<li class="lc-row${sel.has(c) ? " is-sel" : ""}${focusCol === c ? " is-focus" : ""}${hidden.has(c) && !isLot ? " is-hidden" : ""}" data-col="${esc(c)}">`
-        + `<input type="checkbox" class="lc-vis"${!hidden.has(c) || isLot ? " checked" : ""}${isLot ? ' disabled title="ロット番号の列は押して検索するので、いつも先頭に出します"' : ""} aria-label="「${esc(label(t, c))}」を出す">`
-        + `<span class="lc-grip"${isLot ? ' title="いつも先頭"' : ' title="ドラッグで並べ替え"'}>${isLot ? "📌" : "⠿"}</span>`
+        + `<input type="checkbox" class="lc-vis"${!hidden.has(c) || isLot ? " checked" : ""}${isLot ? ' disabled title="ロット番号の列は押して検索するので、隠せません（並びはどこへでも動かせます）"' : ""} aria-label="「${esc(label(t, c))}」を出す">`
+        + '<span class="lc-grip" title="ドラッグで並べ替え">⠿</span>'
         + `<span class="lc-name"><i class="lc-dot ${calc ? "is-calc" : "is-src"}" title="${calc ? "計算・操作（この画面で作った列）" : "元データ"}"></i>${esc(label(t, c))}${l.names[c] ? `<small>${esc(c)}</small>` : ""}${badges}</span>`
         + `<span class="lc-sample" title="${esc(v == null ? "" : v)}">${smp}</span></li>`;
     }).join("") || '<li class="lc-empty">当たる列がありません</li>';
@@ -495,7 +535,7 @@
     box.innerHTML = `
       <div class="lc-card"><b>${esc(label(t, c))}</b>
         <dl><dt>${calc ? "作った列" : "元の項目名"}</dt><dd>${esc(c)}${calc ? "（表示だけの列。並べ替え・絞り込みは元のデータの列で行います）" : ""}</dd><dt>値のある行</dt><dd>${vals.length} / ${ctx.rows.length}（空欄 ${ctx.rows.length - vals.length}）</dd>
-        <dt>値の種類</dt><dd>${guess}</dd>${c === ctx.lotColumn ? "<dt>この列について</dt><dd>押すとそのロットを検索します。いつも先頭に出し、隠せません。</dd>" : ""}</dl></div>
+        <dt>値の種類</dt><dd>${guess}</dd>${c === ctx.lotColumn ? "<dt>この列について</dt><dd>押すとそのロットを検索します。隠せません（並びはどこへでも動かせます）。</dd>" : ""}</dl></div>
       <section class="lc-step"><h4><i>1</i>見せ方</h4>
         <label>表示名<input id="lcName" value="${esc(l.names[c] || "")}" placeholder="${esc(c)}" maxlength="40"></label>
         <div class="lc-field"><span>幅</span>
@@ -644,7 +684,6 @@
       } else if (e.ctrlKey || e.metaKey) { if (sel.has(c)) sel.delete(c); else sel.add(c); anchor = c; }
       else if (!sel.has(c)) { sel = new Set([c]); anchor = c; }
       focusCol = c;
-      if (c === ctx.lotColumn) { sel.delete(c); renderPanel(); return; }
       const y0 = e.clientY; let dragging = false, ghost = null, marker = null, target = null, after = false;
       const move = (ev) => {
         if (!dragging && Math.abs(ev.clientY - y0) < 4) return;
@@ -656,7 +695,7 @@
         }
         ghost.style.left = ev.clientX + 12 + "px"; ghost.style.top = ev.clientY + 8 + "px";
         const over = document.elementFromPoint(ev.clientX, ev.clientY)?.closest("#lcList li[data-col]");
-        if (over && over.dataset.col !== ctx.lotColumn) {
+        if (over) {
           const r = over.getBoundingClientRect(); after = ev.clientY > r.top + r.height / 2; target = over.dataset.col;
           marker.style.top = (over.offsetTop + (after ? over.offsetHeight : 0) - 1) + "px"; marker.hidden = false;
         }
@@ -738,6 +777,7 @@
 
   window.LotListColumns = {
     get, ordered, visible, label, alignOf, widthOf, tintCss, rowGap, setRowGap, rowPad, GAP,
+    cellPad, setCellPad, overflow, setOverflow, OVERFLOWS, PAD_MAX, freeze, setFreeze, FREEZE_MAX, freezeCss,
     allColumns, isComputed, cell,
     setContext, bindHeader, toggle,
     // テスト・評価用

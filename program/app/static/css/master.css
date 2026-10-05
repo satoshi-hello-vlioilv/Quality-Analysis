@@ -260,3 +260,42 @@ table.master-table.pz-table{table-layout:auto}   /* 列の幅は中身に合わ�
 .pz-table tr.is-live td{background:#f1faf5}
 .pz-btn.dz-go{color:var(--on-fill);background:var(--h-input);border-color:var(--h-input);font-weight:700}
 .pz-btn.dz-go:hover{background:#34557b}
+/* 配布の置き場を変える: 「上のフォルダ ＼ 名前」を横に並べ、できあがる場所をその下に（入力と結果を近くに置く）。
+   確かめた結果は 緑＝変えられる／赤＝理由／淡い＝確かめ中。主操作は藍（ほかの主操作と同じ） */
+.dz-place-btn{margin-left:8px}
+.dz-bad-acts{margin-top:8px;display:flex;align-items:center;gap:10px}
+.dz-bad-acts small{color:#7a2418}
+.dz-place{margin:0 0 12px;padding:12px 14px;border:1px solid var(--line);border-left:4px solid var(--h-input);border-radius:10px;background:var(--surface)}
+.dz-pl-head{display:flex;flex-direction:column;gap:2px;margin-bottom:10px}
+.dz-pl-head b{font-size:14px;color:var(--ink)}
+.dz-pl-head small{font-size:12.5px;color:var(--muted)}
+.dz-pl-grid{display:grid;grid-template-columns:minmax(0,3fr) auto minmax(0,1.4fr);align-items:end;gap:8px}
+.dz-pl-f{display:flex;flex-direction:column;gap:4px;font-size:12.5px;font-weight:700;color:var(--muted)}
+.dz-pl-f input{font-family:Consolas,"BIZ UDGothic",monospace}
+.dz-pl-sep{padding-bottom:8px;font-size:18px;font-weight:800;color:#9aabb8}
+.dz-pl-new{margin:8px 0;font-size:13px;color:var(--muted)}
+.dz-pl-new code{font-family:Consolas,"BIZ UDGothic",monospace;font-size:12.5px;background:var(--input-soft);color:var(--h-input);padding:2px 6px;border-radius:4px;word-break:break-all;font-weight:700}
+.dz-pl-copy{display:grid;grid-template-columns:auto 1fr;gap:1px 8px;align-items:start;font-size:13px;cursor:pointer}
+.dz-pl-copy input{grid-row:1/span 2;margin-top:3px}
+.dz-pl-copy small{color:var(--muted);font-size:12px}
+.dz-pl-state{margin:10px 0;padding:8px 12px;border-radius:8px;font-size:13px;line-height:1.6;background:var(--surface-2);color:var(--muted)}
+.dz-pl-state:empty{display:none}
+.dz-pl-state.ok{background:#eef8f2;color:#1f6b3d}
+.dz-pl-state.ng{background:var(--danger-bg);color:#7a2418}
+.dz-pl-state small{display:block;font-size:12px;opacity:.85}
+.dz-pl-acts{display:flex;gap:8px}
+.dz-pl-acts .btn-primary{height:32px;padding:0 16px}
+/* 変えたあとのフォルダの形（木）: いまの置き場＝灰（残す）・新しい置き場＝藍（写す）・使えない＝赤。線でつながりを見せる */
+.dz-tree{margin:4px 0 10px;padding:8px 12px;border-radius:8px;background:var(--surface-2);font-family:Consolas,"BIZ UDGothic",monospace;font-size:12.5px;line-height:1.75;display:flex;gap:28px;flex-wrap:wrap}
+.dz-tree:empty{display:none}
+.dz-tree ul{list-style:none;margin:0;padding:0}
+.dz-tree ul ul{margin-left:9px;padding-left:14px;border-left:1px solid #c3d0db}
+.dz-tree li{position:relative;word-break:break-all}
+.dz-tree ul ul > li::before{content:"";position:absolute;left:-14px;top:.85em;width:10px;border-top:1px solid #c3d0db}
+.dz-tree em{margin-left:8px;font-style:normal;font-family:"Yu Gothic UI","Meiryo UI",sans-serif;font-size:11.5px;padding:0 7px;border-radius:999px}
+.dz-t-old{color:var(--faint)}.dz-t-old em{background:var(--plain-soft);color:var(--plain-ink)}
+.dz-t-new > b{padding:0 4px;border-radius:3px}
+.dz-t-new.is-copy > b,.dz-t-new.is-switch > b,.dz-t-new.is-empty > b{color:var(--h-input);background:var(--input-soft)}
+.dz-t-new.is-copy > em,.dz-t-new.is-switch > em,.dz-t-new.is-empty > em{background:var(--input-soft);color:var(--h-input);font-weight:700}
+.dz-t-new.is-ng > b{color:var(--danger);background:var(--danger-bg)}.dz-t-new.is-ng > em{background:var(--danger-bg);color:var(--danger);font-weight:700}
+.dz-t-dist{background:var(--ok-soft)!important;color:var(--ok-ink)!important}

@@ -122,8 +122,10 @@
 
     /** 重なって開く窓を登録する。Esc（いちばん上の1枚）と、backdrop なら窓の外側（背景）を押したときに close()。 */
     layer(el, close, { backdrop = true } = {}) {
-      layers.push({ el, close });
+      const entry = { el, close };
+      layers.push(entry);
       if (backdrop) el.addEventListener("click", (e) => { if (e.target === el) close(); });
+      return () => { const i = layers.indexOf(entry); if (i >= 0) layers.splice(i, 1); };   // 窓を捨てるとき（いくつも開くカード）
     },
 
     /** 開いたメニューを、外側を押す・Esc で閉じる。onClose(byEsc) を1度だけ呼ぶ。戻り値は見張りを外す関数。
@@ -155,34 +157,100 @@
       el.style.top = `${Math.round(Math.max(8, Math.min(y, innerHeight - el.offsetHeight - 8)))}px`;
     },
 
-    /** 動かせる・大きさを変えられる窓（表示列・読み替えルール）。位置と大きさを key でこの PC に覚え、
+    /** 動かせる・大きさを変えられる窓（表示列・読み替えルール・カード）。位置と大きさを key でこの PC に覚え、
         [data-drag] の見出しを掴んで動かせる（見出しが画面に残る範囲）。w・h・top は覚えが無いときの大きさと上端、
         align は覚えが無いときの左右の置き場（center＝真ん中／right＝右寄せ。後ろの一覧を隠しすぎない窓）。
-        戻り値: place() 覚えた位置に置く（画面が変わっていれば収める）／ remember() いまの位置と大きさを覚える（隠す前に）。 */
-    floatPanel(panel, { key, w = 1200, h = 780, top = 40, align = "center" }) {
-      const MIN_W = 400, MIN_H = 300;
+        大きさは4辺と4隅の取っ手（CSS の resize は overflow:clip の窓では効かないので使わない）。
+        細かく合わせる: 動かす・変えるあいだは画面の端とほかの窓（[data-float]）の辺へ 8px で吸い付き（Alt を押すと吸い付かない）、
+        位置と大きさを窓の隅に数で出す。窓の中で Alt+矢印＝動かす・Alt+Shift+矢印＝大きさ（10px。Ctrl も押すと 1px）。
+        戻り値: place() 覚えた位置に置く（画面が変わっていれば収める）／ remember() いまの位置と大きさを覚える（隠す前に）／
+                rect() いまの位置と大きさ／ setRect({x,y,w,h}, keep) 置く（画面に収める。keep=false なら覚えない）。 */
+    floatPanel(panel, { key = "", w = 1200, h = 780, top = 40, align = "center", minW = 400, minH = 300 }) {
+      const SNAP = 8, KEY_STEP = 10;
+      panel.dataset.float = "";
       const remember = () => {
-        if (panel.hidden) return;
+        if (panel.hidden || !key) return;
         const b = panel.getBoundingClientRect();
-        if (b.width < MIN_W || b.height < MIN_H) return;   // 出ていない・畳まれた大きさは覚えない
+        if (b.width < minW || b.height < minH) return;   // 出ていない・畳まれた大きさは覚えない
         TPA.local.set(key, { x: Math.round(b.left), y: Math.round(b.top), w: Math.round(b.width), h: Math.round(b.height) });
       };
-      panel.querySelector("[data-drag]").addEventListener("mousedown", (e) => {
-        if (e.target.closest("button,input")) return;
-        const r = panel.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+      const rect = () => { const b = panel.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; };
+      const apply = (r) => {
+        const pw = Math.max(minW, Math.min(innerWidth - 8, Math.round(r.w))), ph = Math.max(minH, Math.min(innerHeight - 8, Math.round(r.h)));
+        Object.assign(panel.style, { width: pw + "px", height: ph + "px",
+          left: Math.round(Math.max(0, Math.min(r.x, innerWidth - 80))) + "px", top: Math.round(Math.max(0, Math.min(r.y, innerHeight - 40))) + "px" });
+      };
+      /* 吸い付く先の線（画面の端・ほかの窓の辺）。x の線と y の線 */
+      const guides = () => {
+        const xs = [0, innerWidth], ys = [0, innerHeight];
+        document.querySelectorAll("[data-float]").forEach((el) => {
+          if (el === panel || el.hidden || !el.isConnected) return;
+          const b = el.getBoundingClientRect(); if (!b.width) return;
+          xs.push(b.left, b.right); ys.push(b.top, b.bottom);
+        });
+        return { xs, ys };
+      };
+      const snap = (v, lines) => { let best = v, d = SNAP + 1; lines.forEach((l) => { const k = Math.abs(l - v); if (k < d) { d = k; best = l; } }); return best; };
+      let readout = null, readTimer = null;
+      const showRead = () => {
+        if (!readout) { readout = document.createElement("div"); readout.className = "fp-read"; panel.append(readout); }
+        const r = rect();
+        readout.textContent = `${Math.round(r.x)}, ${Math.round(r.y)}　${Math.round(r.w)} × ${Math.round(r.h)}`;
+        readout.hidden = false; clearTimeout(readTimer); readTimer = setTimeout(() => { if (readout) readout.hidden = true; }, 1200);
+      };
+      /* 掴んで動かす・大きさを変える（edge: "move" か n/s/e/w の組み合わせ） */
+      const grab = (e, edge) => {
+        if (e.button !== 0) return;
+        e.preventDefault(); e.stopPropagation();
+        const r0 = rect(), x0 = e.clientX, y0 = e.clientY, g = guides();
+        document.body.classList.add("fp-busy");
+        panel.classList.add("is-moving");
         const move = (ev) => {
-          panel.style.left = Math.max(0, Math.min(ev.clientX - dx, innerWidth - 80)) + "px";
-          panel.style.top = Math.max(0, Math.min(ev.clientY - dy, innerHeight - 40)) + "px";
+          const dx = ev.clientX - x0, dy = ev.clientY - y0, free = ev.altKey;
+          let { x, y, w: rw, h: rh } = r0;
+          if (edge === "move") {
+            x += dx; y += dy;
+            if (!free) {
+              const sx = snap(x, g.xs), sx2 = snap(x + rw, g.xs) - rw, sy = snap(y, g.ys), sy2 = snap(y + rh, g.ys) - rh;
+              x = sx !== x ? sx : sx2; y = sy !== y ? sy : sy2;
+            }
+          } else {
+            if (edge.includes("e")) { rw = Math.max(minW, r0.w + dx); if (!free) rw = snap(x + rw, g.xs) - x; }
+            if (edge.includes("s")) { rh = Math.max(minH, r0.h + dy); if (!free) rh = snap(y + rh, g.ys) - y; }
+            if (edge.includes("w")) { let nx = Math.min(r0.x + r0.w - minW, r0.x + dx); if (!free) nx = snap(nx, g.xs); rw = r0.x + r0.w - nx; x = nx; }
+            if (edge.includes("n")) { let ny = Math.min(r0.y + r0.h - minH, r0.y + dy); if (!free) ny = snap(ny, g.ys); rh = r0.y + r0.h - ny; y = ny; }
+          }
+          apply({ x, y, w: rw, h: rh }); showRead();
         };
-        const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); remember(); };
+        const up = () => {
+          document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up);
+          document.body.classList.remove("fp-busy"); panel.classList.remove("is-moving"); remember();
+        };
         document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
+      };
+      panel.querySelector("[data-drag]").addEventListener("mousedown", (e) => { if (!e.target.closest("button,input,select,label,a")) grab(e, "move"); });
+      ["n", "s", "e", "w", "ne", "nw", "se", "sw"].forEach((edge) => {
+        const hd = document.createElement("i");
+        hd.className = `fp-h fp-${edge}`; hd.setAttribute("aria-hidden", "true");
+        hd.addEventListener("mousedown", (e) => grab(e, edge));
+        panel.append(hd);
       });
-      new ResizeObserver(remember).observe(panel);   // 大きさは右下の取っ手（CSS resize）
+      panel.addEventListener("keydown", (e) => {
+        const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+        if (!dir || !e.altKey || e.target.closest("input,select,textarea")) return;
+        e.preventDefault(); e.stopPropagation();
+        const step = e.ctrlKey ? 1 : KEY_STEP, r = rect();
+        if (e.shiftKey) apply({ ...r, w: r.w + dir[0] * step, h: r.h + dir[1] * step });
+        else apply({ ...r, x: r.x + dir[0] * step, y: r.y + dir[1] * step });
+        showRead(); remember();
+      });
+      new ResizeObserver(remember).observe(panel);
       return {
-        remember,
+        remember, rect,
+        setRect(r, keep = true) { apply(r); if (keep) remember(); },
         place() {
-          let r = TPA.local.get(key, null);
-          if (!r || r.w < MIN_W || r.h < MIN_H) r = null;
+          let r = key ? TPA.local.get(key, null) : null;
+          if (!r || r.w < minW || r.h < minH) r = null;
           const pw = Math.min(innerWidth - 24, r ? r.w : w), ph = Math.min(innerHeight - 24, r ? r.h : h);
           Object.assign(panel.style, { width: pw + "px", height: ph + "px",
             left: Math.max(12, Math.min(r ? r.x : align === "right" ? innerWidth - pw - 24 : (innerWidth - pw) / 2, innerWidth - pw - 12)) + "px",
