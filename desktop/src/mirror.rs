@@ -23,12 +23,14 @@ fn now() -> f64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0)
 }
 
-/// OS の誤りの文（Python の _os_error_text と同じ形: "Errno 2 No such file or directory"・Windows は "WinError 2 …"）。
+/// OS の誤りの文（Python の _os_error_text と同じ形: "Errno 2 No such file or directory"・Windows は "WinError 2 …"・末尾の句点なし）。
 pub fn os_error_text(e: &std::io::Error) -> String {
     let text = e.to_string();
     match e.raw_os_error() {
         Some(n) => {
             let msg = text.strip_suffix(&format!(" (os error {n})")).unwrap_or(&text).trim();
+            // Windows の文は末尾に句点が付く。Python（CPython）は末尾の空白と「.」を落とすので合わせる
+            let msg = if cfg!(windows) { msg.trim_end_matches(|c: char| c == '.' || c.is_whitespace()) } else { msg };
             format!("{} {n} {msg}", if cfg!(windows) { "WinError" } else { "Errno" })
         }
         None => text,
