@@ -94,7 +94,8 @@ class Parity(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.tmp = tempfile.TemporaryDirectory()
+        # 片付けは、裏の糸（ref の一覧の問い合わせで動き出す品質データの写しの係）がまだ書いていても失敗にしない
+        cls.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         env = {**os.environ, "TRANSFER_LOCAL_ROOT": cls.tmp.name, "PYTHONIOENCODING": "utf-8"}
         cls.old_env = dict(os.environ)
         os.environ["TRANSFER_LOCAL_ROOT"] = cls.tmp.name
