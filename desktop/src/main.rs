@@ -17,9 +17,10 @@ mod router;
 mod sidecar;
 
 use brand::brand;
-use router::{error_reply, After, Native, Router};
+use da_core::lot::Lot;
+use router::{error_reply, After, Backend, Native, Router};
 use serde_json::json;
-use sidecar::{Progress, Reply, Supervisor};
+use sidecar::{Ask, Progress, Reply, Supervisor};
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -113,9 +114,9 @@ fn selftest_finish(app: &AppHandle, result: &serde_json::Value) {
     }
 }
 
-/// 窓そのものが答える問い合わせ（終了・窓の情報・自己診断の受け口）。
-fn native(app: AppHandle, info: serde_json::Value) -> Native {
-    Box::new(move |method, path, body| match (method, path) {
+/// 窓そのものが答える問い合わせ（終了・窓の情報・自己診断の受け口・異常ロット一覧）。
+fn native(app: AppHandle, info: serde_json::Value, lot: Arc<Lot>) -> Native {
+    Box::new(move |req, backend| match (req.method, req.path) {
         // 画面の「終了」・版が混ざったときの「再起動する」。答えてから閉じる（中身の Python は入力が閉じて自分で終わる）
         ("POST", "/api/shutdown") => {
             let app = app.clone();
@@ -129,17 +130,33 @@ fn native(app: AppHandle, info: serde_json::Value) -> Native {
         ("GET", "/__desktop/info") => Some(json_reply(&info)),
         ("GET", "/__desktop/downloads") => Some(json_reply(&json!(downloads().lock().map(|v| v.clone()).unwrap_or_default()))),
         ("POST", "/__desktop/selftest") => {
-            let result: serde_json::Value = serde_json::from_slice(body).unwrap_or_else(|e| json!({"ok": false, "error": e.to_string()}));
+            let result: serde_json::Value =
+                serde_json::from_slice(req.body).unwrap_or_else(|e| json!({"ok": false, "error": e.to_string()}));
             selftest_finish(&app, &result);
             Some(json_reply(&json!({"received": true})))
         }
-        _ => None,
+        (method, path) => {
+            lot.handle(method, path, req.query, &|| lot_settings(backend)).map(|(status, v)| Reply { status, ..json_reply(&v) })
+        }
     })
 }
 
-/// 中身が答えたあとに窓が見ること（今は無し。更新の係などを移したら使う）。
-fn after() -> After {
-    Box::new(|_, _, _| {})
+/// 異常ロット一覧の設定を中身（Python）に尋ねる（lot.rs が 10 秒覚える）。
+fn lot_settings(backend: &dyn Backend) -> Result<serde_json::Value, String> {
+    let r = backend.ask(&Ask { method: "GET", path: "/api/lotlist/settings", query: "", headers: vec![], body: &[] });
+    if r.status != 200 {
+        return Err(format!("一覧の設定を読めません（{}）", r.status));
+    }
+    serde_json::from_slice(&r.body).map_err(|e| e.to_string())
+}
+
+/// 中身が答えたあとに窓が見ること: 参照先（設定）を保存したら、一覧の設定を尋ね直す（元ファイル・間隔をすぐ当て直す）。
+fn after(lot: Arc<Lot>) -> After {
+    Box::new(move |method, path, status| {
+        if method == "PUT" && status == 200 && path.starts_with("/api/settings/") {
+            lot.invalidate();
+        }
+    })
 }
 
 fn json_reply(v: &serde_json::Value) -> Reply {
@@ -285,7 +302,16 @@ fn start(app: AppHandle, slot: Arc<OnceLock<AppRouter>>, splash: Arc<Splash>) {
         "exe": std::env::current_exe().unwrap_or_default(), "backend": ready, "url": app_url("/").as_str(),
     });
     let static_dir = program.join("app").join("static");
-    let _ = slot.set(Router { static_dir, backend: sup, native: native(app.clone(), info), after: after() });
+    // 異常ロット一覧（写しは作業場所の db_cache・Python と同じ台帳）
+    let lot = Arc::new(Lot::new(locate::local_root().join("db_cache")));
+    let _ = slot.set(Router { static_dir, backend: sup, native: native(app.clone(), info, lot.clone()), after: after(lot.clone()) });
+    // 起動の直後から写し始める（一覧を開いたときに待たせない）
+    let warm = slot.clone();
+    std::thread::spawn(move || {
+        if let Some(r) = warm.get() {
+            lot.warm(&|| lot_settings(&r.backend));
+        }
+    });
     splash.step(&app, "open", "now", "画面を開いています…");
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.navigate(app_url("/"));

@@ -43,8 +43,12 @@ jobs:
       # exe の名前は program/app/brand.json の1か所（ここには書かない）
       - name: exe の名前
         run: '"EXE=" + (Get-Content program/app/brand.json -Raw -Encoding utf8 | ConvertFrom-Json).exe | Out-File -Append -Encoding utf8 $env:GITHUB_ENV'
+      # 異常ロット一覧を Rust と Python で引き比べるため、試験用の品質データ（3000 行）を参照先にした設定で起こす
       - name: 自己診断（本物の WebView2・ポートなし）
         run: |
+          python program\tests\lotlist_fixture.py "$env:RUNNER_TEMP\q.sqlite3" 3000
+          python program\tests\selftest_config.py "$env:RUNNER_TEMP\q.sqlite3" "$env:RUNNER_TEMP\appsettings.json"
+          $env:TRANSFER_APP_CONFIG = "$env:RUNNER_TEMP\appsettings.json"
           $env:TRANSFER_LOCAL_ROOT = "$env:RUNNER_TEMP\root"
           $env:TPA_SELFTEST = "$env:RUNNER_TEMP\selftest.json"
           Start-Process -FilePath "desktop\target\release\$env:EXE" -WorkingDirectory $env:RUNNER_TEMP

@@ -60,8 +60,12 @@ jobs:
       - name: test（Rust）
         working-directory: desktop
         run: cargo test --locked
+      # 異常ロット一覧を Rust と Python で引き比べるため、試験用の品質データ（3000 行）を参照先にした設定で起こす
       - name: 自己診断（本物の窓・WebKitGTK）
         run: |
+          python program/tests/lotlist_fixture.py "$RUNNER_TEMP/q.sqlite3" 3000
+          python program/tests/selftest_config.py "$RUNNER_TEMP/q.sqlite3" "$RUNNER_TEMP/appsettings.json"
+          export TRANSFER_APP_CONFIG="$RUNNER_TEMP/appsettings.json"
           export TRANSFER_LOCAL_ROOT="$RUNNER_TEMP/root" TPA_SELFTEST="$RUNNER_TEMP/selftest.json"
           exe="$(python -c "import json;print(json.load(open('program/app/brand.json',encoding='utf-8'))['exe'][:-4])")"
           cd "$RUNNER_TEMP" && timeout 240 xvfb-run -a "$GITHUB_WORKSPACE/desktop/target/debug/$exe" || true

@@ -7,6 +7,11 @@ rust-version = "1.90"
 publish = false
 
 # exe の名前は program/app/brand.json の exe と同じ（tests/test_brand.py が食い違いを止める）
+# 窓に依らない処理（一覧・写し・Python と同じ書き方）。試験（tests/）からも使う
+[lib]
+name = "da_core"
+path = "src/lib.rs"
+
 [[bin]]
 name = "Defect-Analyzer"
 path = "src/main.rs"
@@ -24,7 +29,11 @@ tauri = { version = "2.12", features = [] }
 tauri-plugin-single-instance = "2.5"
 tauri-plugin-opener = "2.7"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["float_roundtrip"] }
+# 品質データ（SQLite）を引く（src/lotlist.rs）。SQLite は exe に入れる（どの PC でも同じ版・窓関数が使える）
+rusqlite = { version = "0.37", features = ["bundled", "functions", "backup"] }
+# 「N 日以内」の今日（この PC の暦）
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
 # 本物の Python を PID で見る・止める（src/proc.rs）。版は Tauri が使っているものに合わせる（同じ crate を2つ持たない）
 [target.'cfg(windows)'.dependencies]

@@ -54,8 +54,15 @@ pub fn error_reply(status: u16, kind: &str, message: &str) -> Reply {
     }
 }
 
-/// 窓そのものが答える問い合わせ（method, path, 本文）→ 答え。None ならほかへ回す。
-pub type Native = Box<dyn Fn(&str, &str, &[u8]) -> Option<Reply> + Send + Sync>;
+/// 窓そのものが答える問い合わせ。None ならほかへ回す。中身（Python）に尋ねたいときは backend を使う
+/// （例: 異常ロット一覧は設定を Python に尋ねてから Rust が答える・lot.rs）。
+pub struct Req<'a> {
+    pub method: &'a str,
+    pub path: &'a str,
+    pub query: &'a str,
+    pub body: &'a [u8],
+}
+pub type Native = Box<dyn Fn(&Req, &dyn Backend) -> Option<Reply> + Send + Sync>;
 
 /// Python が答えたあとに窓が見る（終了ボタンのあと、中身が片付けて終わったら窓も閉じる等）。
 pub type After = Box<dyn Fn(&str, &str, u16) + Send + Sync>;
@@ -73,7 +80,7 @@ impl<B: Backend> Router<B> {
         let path = uri.path();
         let query = uri.query().unwrap_or("");
         let method = req.method().as_str();
-        let (reply, by) = if let Some(r) = (self.native)(method, path, req.body()) {
+        let (reply, by) = if let Some(r) = (self.native)(&Req { method, path, query, body: req.body() }, &self.backend) {
             (r, "shell")
         } else if let (true, Some(rest)) = (method == "GET" || method == "HEAD", path.strip_prefix("/static/")) {
             (static_file(&self.static_dir, rest, query), "shell")
@@ -177,7 +184,7 @@ mod tests {
         Router {
             static_dir: dir.to_path_buf(),
             backend: Echo(Mutex::default()),
-            native: Box::new(|m, p, _| (m == "GET" && p == "/__desktop/info").then(|| error_reply(200, "info", "窓"))),
+            native: Box::new(|r, _| (r.method == "GET" && r.path == "/__desktop/info").then(|| error_reply(200, "info", "窓"))),
             after: Box::new(|_, _, _| {}),
         }
     }

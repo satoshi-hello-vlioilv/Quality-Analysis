@@ -1,7 +1,8 @@
 /* 自己診断（環境変数 TPA_SELFTEST=結果のファイル で起動したときだけ、窓が画面に流し込む）。
    本物の WebView の中から、窓（Rust）と中身（Python）の組が正しく動くかを確かめて /__desktop/selftest へ送る。窓は結果を書いて終わる。
    調べること: 起動が終わる・振り分け（部品は Rust・画面と API は Python・窓のことは Rust）・使い回しの決まり・大きな日本語の本文・
-   日本語の問い合わせ文字・40 本同時・安全な文脈・保存領域・保存（ダウンロード）・窓の情報・画面のエラーが無い・速さ。 */
+   日本語の問い合わせ文字・40 本同時・安全な文脈・保存領域・保存（ダウンロード）・窓の情報・異常ロット一覧（Rust と Python の突き合わせ）・
+   画面のエラーが無い・速さ。 */
 (async () => {
   const res = [];
   const ok = (name, cond, info = "") => res.push({ name, ok: !!cond, info: String(info).slice(0, 300) });
@@ -51,7 +52,7 @@
     await get("/api/ui-state", json("POST", { changed: {}, removed: [key] }));
 
     // 5) 日本語の問い合わせ文字（Python のアプリが JSON で答える。元ファイルが無い PC では理由つきの誤り）
-    const q = await get("/api/lotlist?search=" + encodeURIComponent("日本語・ロット") + "&page=1");
+    const q = await get("/api/lotlist?search=" + encodeURIComponent("日本語・ロット") + "&page=1&engine=python");
     let qj = null; try { qj = JSON.parse(q.text); } catch (_) { /* 下で失敗にする */ }
     ok("日本語の問い合わせ文字（Python が JSON で答える）", q.by === "python" && qj && (q.r.ok || qj.error), `${q.r.status} ${q.text.slice(0, 80)}`);
 
@@ -86,12 +87,41 @@
        `protocol ${info.protocol}/${ready.protocol} serves=${JSON.stringify(info.serves)} root=${info.local_root}`);
     ok("窓の版と中身の版が同じ", info.shell_version === ready.version, `${info.shell_version} / ${ready.version}`);
 
-    // 10) 画面のエラーが無い（窓の外の受け口 /__desktop/update などが無くても、画面は黙って続ける）
+    // 10) 異常ロット一覧（Rust が写しから引く・lot.rs）。同じ問い合わせを Python（engine=python）でも引き、答えが同じか
+    const ll = await get("/api/lotlist?page=1");
+    ok("一覧は Rust が答える", ll.by === "shell", `${ll.by} ${ll.r.status}`);
+    const llSrc = await get("/api/lotlist/source");
+    ok("データの時刻は Rust が答える（共有を見に行かない）", llSrc.by === "shell" && llSrc.r.ok, llSrc.text.slice(0, 120));
+    let llCount = 0; try { llCount = JSON.parse(ll.text).count || 0; } catch (_) { /* 下で言う */ }
+    if (llCount > 0) {
+      const canon = (v) => Array.isArray(v) ? v.map(canon) : v && typeof v === "object"
+        ? Object.fromEntries(Object.keys(v).sort().filter((k) => k !== "timing" && k !== "source").map((k) => [k, canon(v[k])])) : v;
+      const enc = (v) => encodeURIComponent(typeof v === "string" ? v : JSON.stringify(v));
+      const qs = ["page=1", "search=" + enc("汚れ"), "page=3&page_size=50",
+        "filters=" + enc([{ column: "発生日", op: "within_days", value: "90" }, { column: "設備", op: "starts_any", value: "L-,ＣＲ" }]),
+        "group=1&sorts=" + enc([{ column: "重量", dir: "desc" }]),
+        "filters=" + enc([{ column: "発生日", op: "within_days", value: "0" }, { column: "設備", op: "eq", value: "無い" }])];
+      const differ = [], speed = { rust: 0, python: 0 };
+      for (const q of qs) {
+        let s = performance.now(); const rs = await get("/api/lotlist?" + q); speed.rust += performance.now() - s;
+        s = performance.now(); const py = await get("/api/lotlist?" + q + "&engine=python"); speed.python += performance.now() - s;
+        if (py.by !== "python" || JSON.stringify(canon(JSON.parse(rs.text))) !== JSON.stringify(canon(JSON.parse(py.text)))) differ.push(q);
+      }
+      ok(`一覧: Rust と Python の答えが同じ（${qs.length} 通り・日本語の検索・絞り込み・ページ・まとめ・0 件の手がかり）`, differ.length === 0,
+         differ.length ? differ.join(" | ") : `${llCount} 行・Rust ${speed.rust.toFixed(0)}ms / Python ${speed.python.toFixed(0)}ms`);
+      const pySrc = JSON.parse((await get("/api/lotlist/source?engine=python")).text), rsSrc = JSON.parse(llSrc.text);
+      ok("写しは 1 つ: Python も Rust が写した写しを読む（同じ台帳・同じ元の時刻）", rsSrc.mirrored && pySrc.mirrored && pySrc.at === rsSrc.at,
+         `Rust ${rsSrc.at} / Python ${pySrc.at}`);
+    } else {
+      ok("一覧の突き合わせ: 元ファイルが無いので比べない（CI は試験用の品質データで比べる）", true, ll.text.slice(0, 120));
+    }
+
+    // 11) 画面のエラーが無い（窓の外の受け口 /__desktop/update などが無くても、画面は黙って続ける）
     await sleep(500);
     const errs = window.__tpaErrors || [];
     ok("画面のエラーが無い", errs.length === 0, errs.join(" / "));
 
-    // 11) 速さ（参考）: Python へ 30 回・Rust の部品 30 回の平均（ミリ秒）
+    // 12) 速さ（参考）: Python へ 30 回・Rust の部品 30 回の平均（ミリ秒）
     const avg = async (url) => { const s = performance.now(); for (let i = 0; i < 30; i++) await (await fetch(url)).arrayBuffer(); return (performance.now() - s) / 30; };
     const py = await avg("/api/build"), sh = await avg(`/static/js/shared.js?v=${fp}`);
     ok("問い合わせの速さ（参考）", py < 300, `Python ${py.toFixed(1)}ms / Rust の部品 ${sh.toFixed(1)}ms`);
