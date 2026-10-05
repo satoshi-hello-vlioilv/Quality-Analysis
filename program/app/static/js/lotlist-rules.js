@@ -224,7 +224,7 @@
     $$(".lr-mode [data-mode]", panel).forEach((b) => { b.onclick = () => { mode = b.dataset.mode; paintMode(); refreshCounts(); }; });
     $("#lrToFormula").onclick = () => { const box = $("#lrFx"); box.hidden = !box.hidden; $("#lrToFormula").setAttribute("aria-expanded", String(!box.hidden)); renderFx(); };
     panel.addEventListener("keydown", (e) => { if (e.key === "Escape" && !e.defaultPrevented) { e.preventDefault(); e.stopPropagation(); close(); } });
-    win = TPA.floatPanel(panel, { key: RECT, w: 1180, h: 760, top: 60 });   // 見出しで動かす・右下で大きさ。この PC に覚える
+    win = TPA.floatPanel(panel, { key: RECT, w: 1180, h: 760, top: 60, minW: 820, minH: 460 });   // 見出しで動かす・4辺と4隅で大きさ。この PC に覚える
     return panel;
   }
   function addRow(row) {

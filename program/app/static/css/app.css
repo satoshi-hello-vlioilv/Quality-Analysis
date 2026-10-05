@@ -510,3 +510,20 @@ td.edit.has-auto::after{content:"自動";position:absolute;top:0;right:3px;font-
 .cl-entry h4 small{margin-left:8px;color:var(--muted);font-weight:400}
 .cl-entry h4 .cl-now{margin-left:8px;font-size:11px;background:var(--input-soft);color:var(--h-input);border-radius:9px;padding:1px 7px}
 .cl-entry ul{margin:0;padding-left:18px;line-height:1.7;font-size:var(--fs-sm)}
+
+/* ---------- 動かせる・大きさを変えられる窓（TPA.floatPanel）: 4辺と4隅の取っ手・位置と大きさの数 ----------
+   取っ手は窓の内側の縁に重ねる（窓は overflow:clip なので外へは出せない）。見た目は出さず、指す形（カーソル）で知らせる。
+   右下だけは小さな斜線を見せる（大きさを変えられることの手がかり）。 */
+.fp-h{position:absolute;z-index:6;display:block}
+.fp-n,.fp-s{left:12px;right:12px;height:6px;cursor:ns-resize}.fp-n{top:0}.fp-s{bottom:0}
+.fp-e,.fp-w{top:12px;bottom:12px;width:6px;cursor:ew-resize}.fp-e{right:0}.fp-w{left:0}
+.fp-ne,.fp-nw,.fp-se,.fp-sw{width:14px;height:14px}
+.fp-ne{top:0;right:0;cursor:nesw-resize}.fp-sw{bottom:0;left:0;cursor:nesw-resize}
+.fp-nw{top:0;left:0;cursor:nwse-resize}.fp-se{bottom:0;right:0;cursor:nwse-resize}
+.fp-se::after{content:"";position:absolute;right:3px;bottom:3px;width:8px;height:8px;
+  background:linear-gradient(135deg,transparent 45%,#9aabb8 45%,#9aabb8 55%,transparent 55%,transparent 70%,#9aabb8 70%,#9aabb8 80%,transparent 80%)}
+.fp-h:hover{background:rgba(63,101,145,.14)}
+.fp-read{position:absolute;right:18px;bottom:10px;z-index:7;padding:3px 9px;border-radius:6px;background:#1f3b54;color:#fff;
+  font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;pointer-events:none;box-shadow:0 6px 16px rgba(10,30,45,.25)}
+body.fp-busy{user-select:none}
+body.fp-busy iframe{pointer-events:none}

@@ -634,9 +634,14 @@ async function renderRelease() {
   }
   mstate.data.release = d;
   const me = d.me || {};
+  const placeBtn = me.canRelease && !mstate.releaseBusy
+    ? '<button type="button" class="pz-btn dz-place-btn" id="dzPlaceBtn" aria-expanded="false" aria-controls="dzPlaceBox" title="配布の置き場の場所・フォルダの名前を変えます（置いてある版を写して、全員の PC の参照先を切り替えます）">置き場を変える…</button>' : "";
   if (!d.reachable) {
     box.innerHTML = `<div class="dz-bad"><b>更新の置き場に届きません。</b>${escapeHtml(d.why || "")}<br>
-      「参照先」タブの「更新の置き場」を確かめてください（BOX の同期・権限も）。各 PC は届かないあいだ、いまの版のまま開きます。</div>`;
+      「参照先」タブの「更新の置き場」を確かめてください（BOX の同期・権限も）。各 PC は届かないあいだ、いまの版のまま開きます。
+      ${placeBtn ? `<div class="dz-bad-acts">${placeBtn}<small>置き場の場所・名前を変えたときは、ここから新しい置き場へ切り替えられます。</small></div>` : ""}</div>
+      <div class="dz-place" id="dzPlaceBox" hidden></div>`;
+    bindReleasePlace(d);
     return;
   }
   const dist = d.distributed, cur = dist && dist.version, prev = dist && dist.previous;
@@ -671,7 +676,8 @@ async function renderRelease() {
       <td>${escapeHtml(stamp(v.placedAt) || "-")} ${escapeHtml([v.placedPc, v.placedBy].filter(Boolean).join("／"))}</td>
       <td><span class="m-ident">${escapeHtml(v.source || v.zip || "-")}</span></td><td class="num">${MB(v.bytes)}</td><td class="pz-acts">${act}</td></tr>`;
   }).join("");
-  box.innerHTML = `<p class="dz-where">置き場 <code>${escapeHtml(d.found)}</code>${d.adjusted ? "（この PC での BOX の見え方に合わせて探しました）" : ""} ${chip("届いています", "c-on")}</p>
+  box.innerHTML = `<p class="dz-where">置き場 <code>${escapeHtml(d.found)}</code>${d.adjusted ? "（この PC での BOX の見え方に合わせて探しました）" : ""} ${chip("届いています", "c-on")} ${placeBtn}</p>
+    <div class="dz-place" id="dzPlaceBox" hidden></div>
     ${flow}${entry}<div class="dz-put">${put}</div>
     <div class="master-table-wrap pz-wrap"><table class="master-table pz-table">
       <thead><tr><th>版</th><th>状態</th><th>置いた日時・PC／人</th><th>元の ZIP</th><th class="num">大きさ</th><th class="grow"></th></tr></thead>
@@ -681,7 +687,120 @@ async function renderRelease() {
   const zip = $("#dzZip"); if (zip) zip.onchange = () => { placeRelease(zip.files && zip.files[0]); zip.value = ""; };
   const copy = $("#dzCopy"); if (copy) copy.onclick = () => navigator.clipboard.writeText(d.entry.path).then(() => { copy.textContent = "コピーしました"; });
   box.querySelectorAll("[data-dist]").forEach((b) => { b.onclick = () => distributeRelease(b.dataset.dist, d); });
+  bindReleasePlace(d);
   paintReleaseProgress();
+}
+/* ---------------- 配布の置き場を変える（場所・フォルダの名前） ----------------
+   ① 上のフォルダと名前を入れる（いまの置き場から始める）。打つたびにサーバーが確かめ、写す量・切り替えるだけか・使えない理由を出す。
+   ② 変える: いまの置き場を新しい場所の隣の一時フォルダへ写し、写し終えてから名前を付ける（services/release_place.py）
+      → 参照先「更新の置き場」（update.source）を新しい場所に書き換える（全員の PC に効く・行の版と書き込みの門番が効く）。
+   前の置き場は消さない（ほかの PC が持っている前の入口のアドレス・戻すときのため）。 */
+const splitPath = (p) => {
+  const s = String(p || "").trim().replace(/^"|"$/g, "").replace(/[\\/]+$/, "");
+  const i = Math.max(s.lastIndexOf("\\"), s.lastIndexOf("/"));
+  return i < 0 ? ["", s] : [s.slice(0, i) || s.slice(0, i + 1), s.slice(i + 1)];
+};
+function bindReleasePlace(d) {
+  const btn = $("#dzPlaceBtn"), box = $("#dzPlaceBox");
+  if (!btn || !box) return;
+  btn.onclick = () => {
+    if (box.hidden) openReleasePlace(d); else box.hidden = true;
+    btn.setAttribute("aria-expanded", String(!box.hidden));
+  };
+}
+function openReleasePlace(d) {
+  const box = $("#dzPlaceBox"), cur = d.found || String(d.folder || "").split(";")[0] || "";
+  const [parent, name] = splitPath(cur), sep = cur.includes("/") && !cur.includes("\\") ? "/" : "\\";
+  const canCopy = !!(d.reachable && d.found);
+  box.hidden = false;
+  box.innerHTML = `<div class="dz-pl-head"><b>配布の置き場を変える</b><small>置く場所（上のフォルダ）とフォルダの名前を決めます。いまの置き場から始めているので、変えたい所だけ直してください。</small></div>
+    <div class="dz-pl-grid">
+      <label class="dz-pl-f">置く場所（上のフォルダ）<input id="dzPlParent" class="ps-input" value="${escapeHtml(parent)}" spellcheck="false" autocomplete="off"></label>
+      <span class="dz-pl-sep" aria-hidden="true">${escapeHtml(sep)}</span>
+      <label class="dz-pl-f">フォルダの名前<input id="dzPlName" class="ps-input" value="${escapeHtml(name)}" spellcheck="false" autocomplete="off" maxlength="120"></label>
+    </div>
+    <p class="dz-pl-new">新しい置き場 <code id="dzPlDest"></code></p>
+    <div class="dz-tree" id="dzPlTree" aria-label="変えたあとのフォルダの形"></div>
+    <label class="dz-pl-copy"><input type="checkbox" id="dzPlCopy"${canCopy ? " checked" : " disabled"}>
+      置いてある版・配る版・配る入口を、そのまま新しい置き場へ写す<small>${canCopy ? "前の置き場は消さずに残します（あとで要らなければ手で消せます）" : "いまの置き場に届かないので写せません（切り替えるだけになります）"}</small></label>
+    <div class="dz-pl-state" id="dzPlState" aria-live="polite"></div>
+    <div class="dz-pl-acts"><button type="button" class="btn-primary" id="dzPlGo" disabled>この置き場に変える</button><button type="button" class="pz-btn" id="dzPlCancel">やめる</button></div>`;
+  const say = (cls, html) => { const s = $("#dzPlState"); s.className = `dz-pl-state ${cls}`; s.innerHTML = html; };
+  const args = () => ({ from: canCopy ? d.found : "", parent: $("#dzPlParent").value, name: $("#dzPlName").value, copy: $("#dzPlCopy").checked });
+  let seq = 0, timer = null, last = null;
+  const check = async () => {
+    const a = args(), my = ++seq;
+    $("#dzPlDest").textContent = `${a.parent.trim().replace(/^"|"$/g, "").replace(/[\\/]+$/, "")}${sep}${a.name.trim()}`;
+    say("wait", "確かめています…");
+    const r = await masterRequest("/api/release/place/check", TPA.json("POST", a));
+    if (my !== seq) return;               // 打ち続けているあいだの古い答えは捨てる
+    last = r.data || {};
+    $("#dzPlTree").innerHTML = placeTree(d, a, last, sep);
+    const go = $("#dzPlGo");
+    go.disabled = !last.ok;
+    go.textContent = last.mode === "copy" ? "写して、この置き場に変える" : "この置き場に切り替える";
+    if (!last.ok) say("ng", "✕ " + escapeHtml(last.problem || last.error || "変えられません。"));
+    else say("ok", "✓ " + escapeHtml(last.note || "") + (last.mode === "copy" ? `<small>写す量 ${last.files} ファイル・${MB(last.bytes)}</small>` : ""));
+  };
+  const later = () => { clearTimeout(timer); timer = setTimeout(check, 350); };
+  $("#dzPlParent").addEventListener("input", later);
+  $("#dzPlName").addEventListener("input", later);
+  $("#dzPlCopy").addEventListener("change", check);
+  $("#dzPlCancel").onclick = () => { box.hidden = true; $("#dzPlaceBtn")?.setAttribute("aria-expanded", "false"); };
+  $("#dzPlGo").onclick = () => { if (last && last.ok) moveReleasePlace(d, args(), last, say); };
+  check();
+  requestAnimationFrame(() => $("#dzPlName").focus());
+}
+/* 変えたあとのフォルダの形（木）。いまの置き場は灰（残す）、新しい置き場は藍（写す／切り替えるだけ／空のまま）、中身は置いてある版。
+   上のフォルダが同じなら1本の木、違えば2本並べる。使えないときは新しい置き場を赤で示す。 */
+function placeTree(d, a, pl, sep) {
+  const clean = (x) => String(x || "").trim().replace(/^"|"$/g, "").replace(/[\\/]+$/, "");
+  const [curParent, curName] = splitPath(d.found || ""), newParent = clean(a.parent), newName = String(a.name || "").trim() || "（名前）";
+  const same = curParent && curParent.toLowerCase() === newParent.toLowerCase();
+  const dist = d.distributed && d.distributed.version;
+  const vers = (d.versions || []).map((v) => `<li>📁 ${escapeHtml(v.version)}${v.version === dist ? '<em class="dz-t-dist">配る版</em>' : ""}</li>`).join("");
+  const inside = `<ul>${vers}<li>📄 配る版の覚え・配る入口（exe）</li></ul>`;
+  const mode = !pl.ok ? ["is-ng", "使えません"] : pl.mode === "copy" ? ["is-copy", "← いまの置き場を写す"] : pl.mode === "switch" ? ["is-switch", "← 既に置き場（写さずに切り替える）"] : ["is-empty", "← 空のまま切り替える"];
+  const oldLi = d.found ? `<li class="dz-t-old">📁 ${escapeHtml(curName)}<em>いまの置き場・消さずに残す</em></li>` : "";
+  const newLi = `<li class="dz-t-new ${mode[0]}">📁 <b>${escapeHtml(newName)}</b><em>${mode[1]}</em>${pl.ok && pl.mode !== "empty" ? inside : ""}</li>`;
+  const root = (path, items) => `<ul class="dz-t-root"><li>📁 ${escapeHtml(path || "（場所）")}<ul>${items}</ul></li></ul>`;
+  return same ? root(newParent, oldLi + newLi) : (d.found ? root(curParent, oldLi) : "") + root(newParent, newLi);
+}
+async function moveReleasePlace(d, a, pl, say) {
+  const what = pl.mode === "copy" ? `いまの置き場（${d.found}）を写して、新しい置き場（${pl.dest}）に変えます。\n写すもの: ${pl.files} ファイル・${MB(pl.bytes)}（前の置き場は消さずに残します）`
+    : `新しい置き場（${pl.dest}）に切り替えます。` + (pl.mode === "empty" ? "\n新しい置き場に版を置いて配るまで、各 PC はいまの版のまま開きます。" : "");
+  if (!confirm(`${what}\n\n参照先の「更新の置き場」を書き換えるので、全員の PC が次に確かめたとき（起動・30 分ごと）から新しい置き場を見ます。`
+    + "新しい PC へ渡す入口のアドレスも変わります。よろしいですか？")) return;
+  const go = $("#dzPlGo"); go.disabled = true;
+  const r = await masterRequest("/api/release/place/move", TPA.json("POST", a));
+  if (!r.ok) { say("ng", "✕ " + escapeHtml(r.data.error || "変えられませんでした。")); go.disabled = false; return; }
+  if (r.data.started) {
+    for (;;) {                           // 写し終えるまで進み具合を出す（共有・BOX へ数十〜数百 MB）
+      await new Promise((res) => setTimeout(res, 400));
+      const p = (await masterRequest("/api/release/place/progress")).data || {};
+      if (p.state === "failed") { say("ng", "✕ " + escapeHtml(p.error || "写せませんでした。") + "<small>写しかけの物は片付けました。前の置き場はそのままです。</small>"); go.disabled = false; return; }
+      if (p.state !== "running") break;
+      const pct = p.total ? Math.min(100, (p.done / p.total) * 100) : 0;
+      say("wait", `写しています… ${p.files || 0} / ${p.totalFiles || 0} ファイル・${MB(p.done)} / ${MB(p.total)}（経過 ${Math.round(p.elapsed || 0)} 秒）`
+        + `<div class="dz-bar"><i style="width:${pct.toFixed(0)}%"></i></div>`);
+    }
+  }
+  say("wait", "参照先「更新の置き場」を書き換えています…");
+  const st = await masterRequest("/api/settings", { cache: "no-store" });
+  const item = ((st.data || {}).items || []).find((x) => x.key === "update.source") || {};
+  const res = await withLockWait(
+    () => masterRequest("/api/settings/update.source", TPA.json("PUT", { value: r.data.dest, base_rev: item.rev || 0 })),
+    (dd) => say("wait", lockWaitText(dd, "保存", boldName)));
+  if (!res.ok) {
+    say("ng", `✕ ${r.data.started ? "写し終えましたが、" : ""}参照先を書き換えられませんでした: ${escapeHtml(res.data.error || "")}<br>`
+      + `「参照先」タブの「更新の置き場」に <code>${escapeHtml(r.data.dest)}</code> を入れて保存してください。`);
+    return;
+  }
+  emit("tpa:settings-changed", { key: "update.source" });
+  await renderRelease();
+  releaseNotice("ok", `✓ 配布の置き場を ${r.data.dest} に変えました。全員の PC が次に確かめたときから、新しい置き場を見ます。`
+    + "\n新しい PC へ渡すアドレスも変わりました（下の「アドレスをコピー」で写し直してください）。"
+    + (r.data.started ? `\n前の置き場（${d.found}）は残しています。要らなければ、全員がそろったあとで手で消してください。` : ""));
 }
 const cmpVer = (a, b) => { const x = a.split(".").map(Number), y = b.split(".").map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 function paintReleaseProgress() {
