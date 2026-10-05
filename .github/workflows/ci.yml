@@ -23,6 +23,11 @@ jobs:
       # 止まったままだと本物のブラウザの試験（test_lotdsp_direct.RealBrowser）で Chrome がすぐ終わるので外す。
       - name: Chrome のサンドボックスを使えるようにする
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      # 本物のブラウザの試験は、Chrome が 15 秒のうちに DevTools を開くのを待つ（アプリの待ち時間）。CI の起こしたての
+      # 機械では、その日初めての Chrome の起動（字体の一覧づくり・初回の準備）がこれを超え、最初の試験だけが落ちた。
+      # 試験の前に一度起こしておく（アプリと試験の待ち時間は変えない）。
+      - name: Chrome を一度起こしておく
+        run: timeout 120 "$(command -v google-chrome || command -v chromium)" --headless=new --disable-gpu --no-first-run --dump-dom about:blank > /dev/null
       - name: lint（画面の JS の文法）
         run: for f in program/app/static/js/*.js; do node --check "$f"; done
       - name: lint（Python の文法）
