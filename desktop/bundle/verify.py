@@ -12,6 +12,8 @@
   4. もう一度開く → +2 へ入れ替えるが起動できず、控え（+1）へ戻して開き直す。+2 には印が付き、もう取り込まない
   5. 配る版を前の版（distribute.json）に戻す → 使っている間に戻す向きで取り込み、配る版を作業場所に覚える（want.json）
   6. 開き直すと配る版になる
+  7. 新しい PC（まっさらな作業場所）が配る入口を開くだけで、配る版をこの PC へ入れて開き、入口の置き場を控える
+  ショートカット: 無ければ画面が尋ねる・共有を指すショートカットは次の起動でこの PC の app（作業フォルダも）に直す
   あわせて: 共有の配る形は 1 ファイルも変わらない・終わったあと Python が残らない。
 """
 from __future__ import annotations
@@ -104,6 +106,33 @@ def check(cond: bool, what: str, info="") -> bool:
     return cond
 
 
+def make_link(link: Path, target: Path, workdir: Path) -> None:
+    """人が作ったショートカットを真似る（Windows は WScript.Shell、ほかは窓の lnk.rs と同じ小さな JSON）。"""
+    link.parent.mkdir(parents=True, exist_ok=True)
+    if os.name == "nt":
+        ps = (f"$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{link}');$s.TargetPath='{target}';"
+              f"$s.WorkingDirectory='{workdir}';$s.Save()")
+        subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=True)
+    else:
+        link.write_text(json.dumps({"target": str(target), "workdir": str(workdir), "description": ""}), encoding="utf-8")
+
+
+def read_link(link: Path):
+    """→ (指す先, 作業フォルダ)。無ければ None。"""
+    if not link.exists():
+        return None
+    if os.name == "nt":
+        ps = f"$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{link}');$s.TargetPath;$s.WorkingDirectory"
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True).stdout.splitlines()
+        return (Path(out[0]), Path(out[1])) if len(out) >= 2 else None
+    v = json.loads(link.read_text(encoding="utf-8"))
+    return Path(v["target"]), Path(v["workdir"])
+
+
+def same(a, b) -> bool:
+    return os.path.normcase(os.path.realpath(str(a))) == os.path.normcase(os.path.realpath(str(b)))
+
+
 def leftover_python(root: Path) -> list[str]:
     """作業フォルダの program を動かしている Python が残っていないか（Linux は /proc、Windows は wmic の代わりに tasklist では見えないので省く）。"""
     if os.name == "nt":
@@ -144,8 +173,9 @@ def update(exe: Path, work: Path) -> bool:
     conf = work / "appsettings.json"
     subprocess.run([sys.executable, str(REPO / "program" / "tests" / "selftest_config.py"), str(fixture), str(conf), str(rel_root)], check=True)
     local = work / "local"
+    links = [work / "links" / "Desktop", work / "links" / "Programs"]
     env = {k: v for k, v in os.environ.items() if k not in ("TPA_NO_HANDOFF", "TPA_PROGRAM_DIR", "TPA_SELFTEST")}
-    env.update({"TRANSFER_APP_CONFIG": str(conf), "TRANSFER_LOCAL_ROOT": str(local)})
+    env.update({"TRANSFER_APP_CONFIG": str(conf), "TRANSFER_LOCAL_ROOT": str(local), "TPA_LINK_DIRS": os.pathsep.join(map(str, links))})
     run = Run(work, env)
     app = local / "app"
     ok = True
@@ -159,6 +189,11 @@ def update(exe: Path, work: Path) -> bool:
     ok &= check(info.get("installed") is True and info.get("version") == v0, f"1. 版 {v0}", json.dumps(info, ensure_ascii=False))
     ok &= check(upd.get("state") == "ready" and upd.get("ready") == v1, f"1. 使っている間に {v1} を取り込んだ", json.dumps(upd, ensure_ascii=False)[:300])
     ok &= check(bundle.app_version(app / "program") == v0, "1. 取り込んでも動いている app はそのまま")
+    sc = ((info.get("install") or {}).get("shortcut") or {})
+    ok &= check(sc.get("ask") is True and not sc.get("links"), "1. ショートカットが無いので画面が尋ねる", sc)
+    # 人が作った、共有の exe を指し作業フォルダも共有のショートカット（次の起動で直る）
+    lnk = links[0] / f"{b['name']}.lnk"
+    make_link(lnk, share_exe, share_app)
 
     # 2. ショートカットの行き先（app の exe）で開く → 入れ替わる
     r = run.open(app / b["exe"], "app")
@@ -167,6 +202,9 @@ def update(exe: Path, work: Path) -> bool:
     ok &= check(info.get("version") == v1, f"2. 起動の最初に {v1} へ入れ替わった", info.get("version"))
     ok &= check(bundle.app_version(local / "update" / "old" / "program") == v0, f"2. 直前の版 {v0} は控えに")
     ok &= check(upd.get("state") == "latest", "2. 置き場の最新を使っている", upd.get("state"))
+    got = read_link(lnk)
+    ok &= check(bool(got) and same(got[0], app / b["exe"]) and same(got[1], app),
+                "2. 共有を指していたショートカットを、この PC の app（作業フォルダも app）に直した", got)
 
     # 3. 起動できない版を置き、使っている間に取り込ませる
     place(Path(built["stage"]), v2, rel_root, broken=True)
@@ -195,6 +233,19 @@ def update(exe: Path, work: Path) -> bool:
     r = run.open(app / b["exe"], "distribute-open")
     ok &= check(r.get("ok") is True and (r.get("info") or {}).get("version") == v0, f"6. 開き直すと配る版 {v0} になる",
                 (r.get("info") or {}).get("version"))
+
+    # 7. 新しい PC: 配る入口（置き場のアプリのフォルダの exe）を開くだけで、配る版を取り込んでこの PC で開く
+    entry = rel_root / b["name"] / b["exe"]
+    shutil.copy2(share_exe, entry)
+    local2 = work / "local-new-pc"
+    run2 = Run(work, {**env, "TRANSFER_LOCAL_ROOT": str(local2), "TPA_LINK_DIRS": os.pathsep.join(str(work / "links2" / n) for n in ("Desktop", "Programs"))})
+    r = run2.open(entry, "entry")
+    info = r.get("info") or {}
+    ok &= check(r.get("ok") is True and info.get("version") == v0 and info.get("installed") is True,
+                f"7. 配る入口を開くと、配る版 {v0} をこの PC の app に入れて開く", json.dumps(info, ensure_ascii=False)[:300])
+    ok &= check(Path(info.get("program", "")).resolve() == (local2 / "app" / "program").resolve(), "7. 動くのはこの PC の app", info.get("program"))
+    remembered = json.loads((local2 / "entry.json").read_text(encoding="utf-8")).get("dir") if (local2 / "entry.json").exists() else None
+    ok &= check(remembered and same(remembered, rel_root / b["name"]), "7. 入口の置き場を控えた（参照先の置き場が見えない PC でも更新が届く）", remembered)
 
     ok &= check(tree_digest(share_app) == share_digest, "共有の配る形は 1 ファイルも変わらない")
     left = leftover_python(work)
