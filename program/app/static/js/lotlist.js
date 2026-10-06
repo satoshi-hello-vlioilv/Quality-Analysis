@@ -88,6 +88,17 @@
   };
   /* まとめるときのロットの見分け方（サーバーの lot_key と同じ: 大小・前後の空白は同じロット） */
   const lotKey = (r) => (S.lotColumn && r ? String(r[S.lotColumn] ?? "").trim().toUpperCase() : "");
+  /* 段の値の見分け方（サーバーの並べ替えの鍵 SortKey と同じ: app/services/sqlite_ro.sort_key）。
+     空欄（null・空白だけ）は ""、数と数に読める字（" 54"・"1e-05"）は数、ほかは前後の空白を除いた字。
+     並べ替えと同じ鍵で見分けるので、同じ値と見た行は必ず隣り合い、下の段の並びが途中で振り出しに戻らない */
+  const NUM_CHARS = /^[0-9.eE+-]+$/;
+  function sortKey(v) {
+    if (v == null) return "";
+    if (typeof v === "number") return String(v);
+    const s = String(v).trim();
+    if (s && /[0-9]/.test(s) && NUM_CHARS.test(s)) { const n = Number(s); if (!Number.isNaN(n)) return String(n); }
+    return s;
+  }
 
   /* ================= 並び・まとめ（表ごと） ================= */
   const LOT_ORDER = "first";      // ロット番号の段だけ: 並べ替えの順（そのロットのいちばん上の行の順）で集める
@@ -128,6 +139,50 @@
     add: (c) => { if (levels().length >= MAX_SORTS) { flash(`まとめる段は${MAX_SORTS}つまでです`); return; } setLevels(arrange().levels.concat([{ column: c, dir: "asc", lot: c === S.lotColumn }])); flash(`「${window.LotListColumns.label(layoutTarget(), c)}」でまとめました（表の見せ方で段の順を変えられます）`); load(); },
     remove: (c) => { setLevels(arrange().levels.filter((l) => l.column !== c)); load(); },
   });
+  /* ---- 並び・まとめの書き出し・読み込み（表示列と同じ形 {kind, version, savedAt, items:[{target, body}]}） ----
+     body = {levels:[{column, dir, lot}], heads, suppress, sorts:[{column, dir}]}（sorts は「その中の並び」＝見出しで決めた並べ替え） */
+  const ARRANGE_KIND = "tpa-lotlist-arrange";
+  const DIRS = ["asc", "desc", LOT_ORDER];
+  function cleanArrange(b) {
+    const col = (x) => (x && typeof x.column === "string" && x.column ? x.column : "");
+    const levels = (Array.isArray(b && b.levels) ? b.levels : []).filter(col).slice(0, MAX_SORTS)
+      .map((l) => ({ column: l.column, dir: DIRS.includes(l.dir) ? l.dir : "asc", lot: !!l.lot }));
+    const sorts = (Array.isArray(b && b.sorts) ? b.sorts : []).filter(col).slice(0, MAX_SORTS)
+      .map((x) => ({ column: x.column, dir: x.dir === "desc" ? "desc" : "asc" }));
+    return { levels, heads: !b || b.heads !== false, suppress: !!(b && b.suppress), sorts };
+  }
+  function arrangeOf(table) {
+    if (table === S.table) { const { levels: lv, heads, suppress } = arrange(); return { levels: lv, heads, suppress, sorts: S.sorts }; }
+    return cleanArrange({ ...(store.get(KEY.arrange, {})[table] || {}), sorts: store.get(KEY.sorts, {})[table] || [] });
+  }
+  function exportArrange() {
+    const others = Object.keys(store.get(KEY.arrange, {})).filter((t) => t !== S.table);
+    const all = others.length > 0 && confirm("すべての表の並び・まとめを書き出しますか？\n［OK］すべての表　［キャンセル］この表だけ");
+    const tables = all ? [S.table, ...others] : [S.table];
+    TPA.saveJson(ARRANGE_KIND, tables.map((t) => ({ target: t, body: arrangeOf(t) })), `異常ロット一覧_並び・まとめ_${all ? "すべて" : S.table}.json`);
+  }
+  async function importArrange() {
+    let items;
+    try { items = await TPA.pickJson(ARRANGE_KIND, "並び・まとめ"); } catch (e) { flash("読み込めませんでした: " + e.message); return; }
+    if (!items) return;
+    const mine = items.find((x) => x.target === S.table) || (items.length === 1 ? items[0] : null);
+    // ほかの表の分は、その表を開いたときに効くよう覚えるだけ
+    const arr = store.get(KEY.arrange, {}), srt = store.get(KEY.sorts, {});
+    items.filter((x) => x !== mine && typeof x.target === "string" && x.target && x.target !== S.table).forEach((x) => {
+      const { sorts, ...a } = cleanArrange(x.body); arr[x.target] = a;
+      if (sorts.length) srt[x.target] = sorts; else delete srt[x.target];
+    });
+    store.set(KEY.arrange, arr); store.set(KEY.sorts, srt);
+    if (!mine) { flash(`読み込みました（${items.length}件。この表「${S.table}」の分は入っていません）`); return; }
+    // この表の分: この表に無い列は飛ばして数える
+    const b = cleanArrange(mine.body), have = (x) => S.columns.includes(x.column);
+    const skipped = b.levels.filter((l) => !have(l)).length + b.sorts.filter((x) => !have(x)).length;
+    saveArrange({ levels: b.levels.filter(have), heads: b.heads, suppress: b.suppress });
+    S.sorts = b.sorts.filter(have); S.page = 1; saveActive();
+    if (!$("#llViewMenu").hidden) renderViewMenu();
+    flash(`並び・まとめを読み込みました` + (skipped ? `（この表に無い ${skipped}列ぶんは飛ばしました）` : ""));
+    load();
+  }
   const collapsed = () => new Set((TPA.session.get(KEY.collapsed, {})[S.table]) || []);
   function setCollapsed(set) { const all = TPA.session.get(KEY.collapsed, {}); all[S.table] = [...set]; TPA.session.set(KEY.collapsed, all); }
   let onPick = () => {};
@@ -825,6 +880,9 @@
         <div class="vm-looks" role="radiogroup" aria-label="まとめの見せ方">${LOOKS.map(([k, name, tip, heads, sup]) => `<button type="button" role="radio" class="vm-look" data-look="${k}" aria-checked="${!!lv.length && A.heads === heads && A.suppress === sup}"${lv.length ? "" : " disabled"} title="${esc(tip)}">${lookPicture(k)}<span>${name}</span></button>`).join("")}</div>
         <div class="vm-inner"><span>その中の並び</span><div>${innerText || '<em>見出しを押すと並べ替えます（Shift＋クリックで足す）</em>'}
           ${inner.length ? '<button type="button" id="llSortClear">並べ替えを外す</button>' : ""}</div></div>
+        <div class="vm-inner vm-file"><span>ファイル</span><div>
+          <button type="button" id="llArrExport" title="段・向き・見せ方・その中の並びを、JSON のファイルに書き出します（ほかの PC・人へ渡せます）">書き出し…</button>
+          <button type="button" id="llArrImport" title="書き出したファイルを読み込み、この表に当てます（この表に無い列の段は飛ばします）">読み込み…</button></div></div>
       </section>
       <section class="vm-sec" aria-label="列と文字"><h4>列と文字<small>列を狭めても読めるように詰め方を決めます</small></h4>
         <div class="vm-row"><span>詰め具合</span><span class="vm-seg" role="radiogroup" aria-label="詰め具合">${PACKS.map(([k, name, p, o]) => `<button type="button" role="radio" data-pack="${k}" aria-checked="${pad === p && ov === o}" title="余白 左右${p}px・${LC.OVERFLOWS.find((x) => x[0] === o)[1]}">${name}</button>`).join("")}</span></div>
@@ -845,6 +903,8 @@
     const lvList = () => arrange().levels;
     $("#llLvAdd").onchange = (e) => { const c = e.target.value; if (!c) return; setLevels(lvList().concat([{ column: c, dir: "asc", lot: c === S.lotColumn }])); reArrange(); };
     $("#llLvClear")?.addEventListener("click", () => { setLevels([]); reArrange(); });
+    $("#llArrExport").onclick = exportArrange;
+    $("#llArrImport").onclick = importArrange;
     $$("#llLevels .vm-lv", m).forEach((li) => {
       const c = li.dataset.col;
       $$("[data-lv-dir]", li).forEach((b) => { b.onclick = () => { setLevels(lvList().map((l) => (l.column === c ? { ...l, dir: b.dataset.lvDir } : l))); reArrange(); }; });
@@ -941,7 +1001,7 @@
      まとまりはこのページの中だけで数える（ロット番号の段のほかは、ページの境目で続くことがある）。 */
   function arrangedBody(cols, aligns, cellsOf) {
     const t = layoutTarget(), LC = window.LotListColumns, A = arrange(), lv = levels(), n = lv.length, rows = S.rows, shut = collapsed();
-    const keyOf = (r, c, i) => { const v = c === S.lotColumn ? lotKey(r) : String(r[c] ?? "").trim(); return c === S.lotColumn && !v ? `\u0000#${i}` : v; };   // ロット番号が空の行はまとめない
+    const keyOf = (r, c, i) => { const v = c === S.lotColumn ? sortKey(lotKey(r)) : sortKey(r[c]); return c === S.lotColumn && !v ? `\u0000#${i}` : v; };   // ロット番号が空の行はまとめない
     const paths = rows.map((r, i) => lv.map((l) => keyOf(r, l.column, i)));
     const cells = rows.map(cellsOf);
     const same = (i, j, d) => { for (let k = 0; k <= d; k++) if (paths[i][k] !== paths[j][k]) return false; return true; };
@@ -1186,7 +1246,23 @@
     try { const r = await fetch("/api/lotlist/source", { cache: "no-store" }); if (r.ok) { S.source = await r.json(); renderFresh(); } } catch (_) { /* 次の周回で */ }
   }
 
+  /* ---- 一覧の拡大（一時的: この窓のあいだだけ覚え、閉じると 100%） ----
+     表に CSS の zoom を掛ける（列の幅・固定・見出しの貼り付きごと拡大する）。幅の覚えは拡大前の px のまま（lotlist-columns.js） */
+  const ZOOM = { key: "tpa.lotlist.zoom.v1", min: 60, max: 200, step: 10 };
+  function setZoom(pct) {
+    const z = Math.min(ZOOM.max, Math.max(ZOOM.min, Math.round((+pct || 100) / ZOOM.step) * ZOOM.step));
+    $("#llGrid").style.zoom = z === 100 ? "" : String(z / 100);
+    $("#llZoomRange").value = z; $("#llZoomValue").textContent = `${z}%`;
+    $("#llZoomReset").hidden = z === 100; $("#llZoom").classList.toggle("is-zoomed", z !== 100);
+    TPA.session.set(ZOOM.key, z);
+  }
+  function bindZoom() {
+    $("#llZoomRange").addEventListener("input", (e) => setZoom(e.target.value));
+    $("#llZoomReset").addEventListener("click", () => { setZoom(100); $("#llZoomRange").focus(); });
+    setZoom(TPA.session.get(ZOOM.key, 100));
+  }
   function bindGrid() {
+    bindZoom();
     window.LotListColumns.bindHeader($("#llHead"));
     $("#llHead").addEventListener("click", (e) => {
       const th = e.target.closest("th[data-col]"); if (!th || e.target.closest(".col-resize") || th.classList.contains("is-calc")) return;
