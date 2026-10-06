@@ -69,6 +69,9 @@ impl Sidecar {
         cmd.args(&py.args)
             .arg("-X")
             .arg("utf8")
+            // .pyc は program ではなく作業場所へ（program を写す・入れ替えるときに混ざらない。Store 版でも同じ）
+            .arg("-X")
+            .arg(format!("pycache_prefix={}", crate::locate::local_root().join("pycache").display()))
             .arg(program.join("sidecar.py"))
             .current_dir(program)
             .env("PYTHONIOENCODING", "utf-8")

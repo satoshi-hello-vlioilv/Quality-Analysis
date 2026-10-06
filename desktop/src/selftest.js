@@ -128,6 +128,21 @@
   } catch (e) {
     ok("例外", false, e && (e.stack || e.message || e));
   }
-  const body = JSON.stringify({ ok: res.every((r) => r.ok), elapsed_ms: Math.round(performance.now() - t0), ua: navigator.userAgent, results: res });
+  // 更新の係（この PC のアプリで動くときだけ取り込む）。取り込み中なら落ち着くまで待ち、状態を結果に添える（verify.py が読む）
+  let update = null, info = null;
+  try {
+    const end = performance.now() + 60000;
+    for (;;) {
+      update = await (await fetch("/__desktop/update", { cache: "no-store" })).json();
+      if (!["idle", "checking", "staging"].includes(update.state) || performance.now() > end) break;
+      await sleep(500);
+    }
+    info = await (await fetch("/__desktop/info")).json();
+    ok("更新の係が答える（取り込めない理由が無い）", update.state !== "error", `${update.state} ${update.ready || ""} ${update.problem || update.detail || ""}`);
+  } catch (e) {
+    ok("更新の係が答える", false, e && e.message);
+  }
+  const body = JSON.stringify({ ok: res.every((r) => r.ok), elapsed_ms: Math.round(performance.now() - t0), ua: navigator.userAgent, results: res,
+    update, info: info && { exe: info.exe, program: info.program, installed: info.installed, version: (info.backend || {}).version } });
   await fetch("/__desktop/selftest", { method: "POST", headers: { "Content-Type": "application/json" }, body });
 })();

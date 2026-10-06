@@ -1,5 +1,5 @@
 # デスクトップ版（desktop/・Tauri）を Windows で本番の作り方（--release）で作り、本物の WebView2 で自己診断する。
-# 通った exe と自己診断の結果を Artifacts に置く（配る ZIP にするのは、更新・配布の係を移したあと）。
+# 更新の通し（verify.py）を流し、通った exe・配る ZIP（release.json・.sha256 つき）・自己診断の結果を Artifacts に置く。
 name: desktop
 
 on:
@@ -63,6 +63,11 @@ jobs:
           Start-Sleep -Seconds 3
           if (Get-Process python -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*hostedtoolcache*" }) { Write-Host "Python が残っています（窓を閉じても中身が終わっていない）"; exit 4 }
           if (-not $r.ok) { exit 1 }
+      # 更新の通し（desktop/bundle/verify.py）: 共有から写る → 裏で取り込む → 次の起動で入れ替わる → 壊れた版は控えへ戻す → 配る版を戻す
+      - name: 更新の通し（本物の WebView2）
+        run: python desktop\bundle\verify.py update --exe "desktop\target\release\$env:EXE" --work "$env:RUNNER_TEMP\verify"
+      - name: 配る ZIP を作る
+        run: python desktop\bundle\bundle.py build --exe "desktop\target\release\$env:EXE" --out "$env:RUNNER_TEMP\release"
       - name: 成果物をまとめる
         if: always()
         run: |
@@ -70,6 +75,7 @@ jobs:
           New-Item -ItemType Directory -Force $out | Out-Null
           if (Test-Path "desktop\target\release\$env:EXE") { Copy-Item "desktop\target\release\$env:EXE" $out }
           if (Test-Path "$env:RUNNER_TEMP\selftest.json") { Copy-Item "$env:RUNNER_TEMP\selftest.json" $out }
+          Get-ChildItem "$env:RUNNER_TEMP\release" -File -ErrorAction SilentlyContinue | Copy-Item -Destination $out
       - uses: actions/upload-artifact@v4
         if: always()
         with:
