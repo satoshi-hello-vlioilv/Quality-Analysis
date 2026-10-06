@@ -11,6 +11,7 @@
 
 mod brand;
 mod frame;
+mod lnk;
 mod locate;
 mod proc;
 mod router;
@@ -18,6 +19,7 @@ mod sidecar;
 mod updater;
 
 use brand::brand;
+use da_core::install;
 use da_core::lot::Lot;
 use da_core::update::{self, Paths};
 use router::{error_reply, After, Backend, Native, Router};
@@ -141,6 +143,32 @@ fn native(app: AppHandle, info: serde_json::Value, lot: Arc<Lot>, upd: Arc<Updat
             let v: serde_json::Value = serde_json::from_slice(req.body).unwrap_or_default();
             Some(json_reply(&Updater::probe(v["value"].as_str().unwrap_or(""))))
         }
+        // ショートカット（da_core::install・lnk.rs）
+        ("GET", "/__desktop/install") => {
+            Some(json_reply(&install::status(&upd.paths, &lnk::places(), &lnk::OsLinks, &names(), upd.installed)))
+        }
+        ("POST", "/__desktop/shortcut") => {
+            Some(reply_of(install::make(&upd.paths, &lnk::places(), &lnk::OsLinks, &names()).map_err(|e| (400, e))))
+        }
+        ("POST", "/__desktop/shortcut/decline") => Some(reply_of(install::decline(&upd.paths).map_err(|e| (500, e)))),
+        // 配布の画面（da_core::distribute・updater.rs）。だれが置いてよいかは Python に尋ねる
+        ("GET", "/__desktop/release") => Some(match update_settings(backend) {
+            Ok(s) => json_reply(&upd.release_view(&s)),
+            Err(e) => Reply { status: 503, ..json_reply(&json!({"error": e})) },
+        }),
+        ("GET", "/__desktop/release/progress") => Some(json_reply(&upd.place_progress())),
+        ("POST", "/__desktop/release/place") => {
+            let name = da_core::lotlist::parse_query(req.query).into_iter().find(|(k, _)| k == "name").map(|(_, v)| v).unwrap_or_default();
+            Some(reply_of(update_settings(backend).map_err(|e| (503, e)).and_then(|s| upd.place(&s, &name, req.body)).map(|r| {
+                upd.wake();
+                json!({"version": r["version"], "bytes": r["bytes"]})
+            })))
+        }
+        ("POST", "/__desktop/release/distribute") => {
+            let v: serde_json::Value = serde_json::from_slice(req.body).unwrap_or_default();
+            let version = v["version"].as_str().unwrap_or("").to_string();
+            Some(reply_of(update_settings(backend).map_err(|e| (503, e)).and_then(|s| upd.distribute(&s, &version))))
+        }
         ("POST", "/__desktop/update/apply") => {
             if upd.status()["state"] != "ready" || !upd.installed {
                 return Some(Reply {
@@ -213,6 +241,20 @@ fn relaunch(app: &AppHandle, paths: &Paths) -> Result<(), String> {
         app.exit(0);
     });
     Ok(())
+}
+
+/// 結果 → 答え（失敗は状態と {error}）。
+fn reply_of(r: Result<serde_json::Value, (u16, String)>) -> Reply {
+    match r {
+        Ok(v) => json_reply(&v),
+        Err((status, e)) => Reply { status, ..json_reply(&json!({"error": e})) },
+    }
+}
+
+/// ショートカットの名前（いまのアプリ名と、名前の歴史: 版 3.5.0 までのアプリ名 TransferPitchAnalyzer）。
+fn names() -> install::Names<'static> {
+    let b = brand();
+    install::Names { name: &b.name, exe: &b.exe, description: &b.subtitle, legacy: &["TransferPitchAnalyzer"] }
 }
 
 fn json_reply(v: &serde_json::Value) -> Reply {
@@ -313,6 +355,11 @@ fn record_download(ev: DownloadEvent<'_>) -> bool {
 
 /// 中身（Python）を探して起こし、準備できたら主の窓を画面へ切り替える（裏の糸で。窓は先に出しておく）。
 fn start(app: AppHandle, slot: Arc<OnceLock<AppRouter>>, splash: Arc<Splash>) {
+    if let Some(j) = job().get() {
+        if run_job(&app, &splash, j) {
+            return;
+        }
+    }
     let program = match locate::program_dir() {
         Ok(p) => p,
         Err(e) => return splash.fail(&app, "アプリの中身が見つかりません", &e),
@@ -389,6 +436,13 @@ fn start(app: AppHandle, slot: Arc<OnceLock<AppRouter>>, splash: Arc<Splash>) {
     };
     if installed {
         update::confirm(&paths);
+        // ショートカットの指す先・作業フォルダを直す（共有の exe を指す物・前の名前の物。消された物は作り直さない）
+        std::thread::spawn(|| {
+            let p = Paths::new(&locate::local_root());
+            for f in install::maintain(&p, &lnk::places(), &lnk::OsLinks, &names()) {
+                log(&format!("SHORTCUT {f}"));
+            }
+        });
         if let Ok(me) = std::env::current_exe() {
             std::thread::spawn(move || update::cleanup_copies(&Paths::new(&locate::local_root()), &me));
         }
@@ -450,6 +504,88 @@ fn dev_mode() -> bool {
 
 /// 起動のはじめ（窓を作る前）: 入口なら版ごとの写しへ渡し、共有などの配る形ならこの PC へ写してから入口を開く。
 /// 渡したら true（この exe は終わる）。
+/// 窓の中で（起動画面に段を出しながら）する、この PC へ写す仕事。
+#[derive(Debug)]
+enum Job {
+    /// 共有・BOX・展開したフォルダの配る形をこの PC の app へ写す
+    Localize(std::path::PathBuf),
+    /// 配る入口（置き場のアプリのフォルダ）から、配る版を取り込んで app に据える
+    Entry(std::path::PathBuf),
+}
+
+fn job() -> &'static OnceLock<Job> {
+    static J: OnceLock<Job> = OnceLock::new();
+    &J
+}
+
+/// app の exe（入口）を、この exe が終わるのを待つ印つきで起こす。
+fn spawn_entry(paths: &Paths) -> Result<(), String> {
+    let entry = paths.app().join(&brand().exe);
+    std::process::Command::new(&entry)
+        .args(["--wait-pid", &std::process::id().to_string()])
+        .current_dir(paths.app())
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("この PC のアプリを開けません（{}）: {e}", entry.display()))
+}
+
+/// 窓の中でする仕事（写す・取り込む）。済めば入口を開いて窓を閉じ true。写せなければ理由を出す。
+fn run_job(app: &AppHandle, splash: &Splash, job: &Job) -> bool {
+    let b = brand();
+    let paths = Paths::new(&locate::local_root());
+    let result = match job {
+        Job::Localize(dist) => {
+            let version = update::validate_dist(dist, &b.exe, &b.app_id, None).unwrap_or_default();
+            if !update::should_localize(&paths, &version) {
+                Ok(format!("この PC のアプリ（{}）で開きます", paths.app().display()))
+            } else {
+                splash.step(app, "program", "now", &format!("この PC へ写しています（{} → {}）…", dist.display(), paths.app().display()));
+                update::localize(&paths, dist, &b.exe, &b.app_id).map(|v| {
+                    log(&format!("INSTALL {} からこの PC へ写しました（版 {v}）", dist.display()));
+                    format!("版 {v} をこの PC へ写しました")
+                })
+            }
+        }
+        Job::Entry(folder) => {
+            splash.step(app, "program", "now", &format!("配る版を確かめています（{}）…", folder.display()));
+            let (a, s) = (app.clone(), splash);
+            da_core::distribute::install_from_entry(&paths, folder, &b.app_id, &|t| s.step(&a, "program", "now", t)).map(|v| {
+                log(&format!("INSTALL 配る入口（{}）から版 {v} をこの PC へ据えました", folder.display()));
+                format!("配る版 {v} をこの PC へ写しました")
+            })
+        }
+    };
+    match result {
+        Ok(text) => {
+            splash.step(app, "program", "ok", &text);
+            splash.step(app, "open", "now", "この PC のアプリで開いています…");
+            match spawn_entry(&paths) {
+                Ok(()) => {
+                    let app = app.clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(QUIT_DELAY);
+                        app.exit(0);
+                    });
+                    true
+                }
+                Err(e) => {
+                    splash.fail(app, "この PC のアプリを開けません", &e);
+                    true
+                }
+            }
+        }
+        Err(e) if matches!(job, Job::Localize(_)) => {
+            // 写せない（作業場所に書けない等）: 共有のまま開き、理由を更新履歴の窓へ出す
+            log(&format!("INSTALL この PC へ写せないので、共有のまま開きます: {e}"));
+            false
+        }
+        Err(e) => {
+            splash.fail(app, "配る版を取り込めません", &e);
+            true
+        }
+    }
+}
+
 fn hand_off() -> bool {
     if let Some(pid) = arg_u32("--wait-pid") {
         proc::wait_gone(pid, Duration::from_secs(30));
@@ -457,6 +593,13 @@ fn hand_off() -> bool {
     let Ok(me) = std::env::current_exe() else { return false };
     let b = brand();
     let paths = Paths::new(&locate::local_root());
+    // 配る入口（置き場のアプリのフォルダの exe）: 配る版を取り込むのは窓の中で（起動画面に段を出す）
+    if !dev_mode() {
+        if let Some(folder) = da_core::distribute::entry_folder(&me, &b.app_id) {
+            let _ = job().set(Job::Entry(folder));
+            return false;
+        }
+    }
     let spawn = |exe: &std::path::Path, args: &[String]| {
         std::process::Command::new(exe).args(args).current_dir(exe.parent().unwrap_or(std::path::Path::new("."))).spawn().is_ok()
     };
@@ -473,18 +616,10 @@ fn hand_off() -> bool {
                 false
             }
         },
+        // 写すのは窓の中で（起動画面に段を出す）
         update::Step::Localize(dist) => {
-            let version = update::validate_dist(&dist, &b.exe, &b.app_id, None).unwrap_or_default();
-            if update::should_localize(&paths, &version) {
-                match update::localize(&paths, &dist, &b.exe, &b.app_id) {
-                    Ok(v) => log(&format!("INSTALL {} からこの PC へ写しました（版 {v}）", dist.display())),
-                    Err(e) => {
-                        log(&format!("INSTALL この PC へ写せないので、共有のまま開きます: {e}"));
-                        return false;
-                    }
-                }
-            }
-            spawn(&paths.app().join(&b.exe), &["--wait-pid".into(), pid])
+            let _ = job().set(Job::Localize(dist));
+            false
         }
     }
 }

@@ -116,12 +116,22 @@
       ok("一覧の突き合わせ: 元ファイルが無いので比べない（CI は試験用の品質データで比べる）", true, ll.text.slice(0, 120));
     }
 
-    // 11) 画面のエラーが無い（窓の外の受け口 /__desktop/update などが無くても、画面は黙って続ける）
+    // 11) 配布の画面の係（窓）: 答えが返る・版を置けない人は理由つきで断られる（だれが置けるかは Python の権限）
+    const rel = await get("/__desktop/release");
+    let relj = {}; try { relj = JSON.parse(rel.text); } catch (_) { /* 下で言う */ }
+    ok("配布の画面の係が答える（置き場に届くか・権限）", rel.by === "shell" && rel.r.ok && "reachable" in relj && relj.me,
+       `${rel.r.status} reachable=${relj.reachable} canRelease=${(relj.me || {}).canRelease} ${relj.why || ""}`);
+    if (relj.me && !relj.me.canRelease) {
+      const put = await get("/__desktop/release/place?name=x.zip", { method: "POST", headers: { "Content-Type": "application/zip" }, body: new Uint8Array([80, 75]) });
+      ok("版を置けない人は理由つきで断られる", put.r.status === 403 && /開発者・メンテナンス者/.test(put.text), `${put.r.status} ${put.text.slice(0, 80)}`);
+    }
+
+    // 12) 画面のエラーが無い（窓の外の受け口 /__desktop/update などが無くても、画面は黙って続ける）
     await sleep(500);
     const errs = window.__tpaErrors || [];
     ok("画面のエラーが無い", errs.length === 0, errs.join(" / "));
 
-    // 12) 速さ（参考）: Python へ 30 回・Rust の部品 30 回の平均（ミリ秒）
+    // 13) 速さ（参考）: Python へ 30 回・Rust の部品 30 回の平均（ミリ秒）
     const avg = async (url) => { const s = performance.now(); for (let i = 0; i < 30; i++) await (await fetch(url)).arrayBuffer(); return (performance.now() - s) / 30; };
     const py = await avg("/api/build"), sh = await avg(`/static/js/shared.js?v=${fp}`);
     ok("問い合わせの速さ（参考）", py < 300, `Python ${py.toFixed(1)}ms / Rust の部品 ${sh.toFixed(1)}ms`);
@@ -138,11 +148,13 @@
       await sleep(500);
     }
     info = await (await fetch("/__desktop/info")).json();
+    info.install = await (await fetch("/__desktop/install")).json();
     ok("更新の係が答える（取り込めない理由が無い）", update.state !== "error", `${update.state} ${update.ready || ""} ${update.problem || update.detail || ""}`);
   } catch (e) {
     ok("更新の係が答える", false, e && e.message);
   }
   const body = JSON.stringify({ ok: res.every((r) => r.ok), elapsed_ms: Math.round(performance.now() - t0), ua: navigator.userAgent, results: res,
-    update, info: info && { exe: info.exe, program: info.program, installed: info.installed, version: (info.backend || {}).version } });
+    update, info: info && { exe: info.exe, program: info.program, installed: info.installed, version: (info.backend || {}).version,
+      install: info.install } });
   await fetch("/__desktop/selftest", { method: "POST", headers: { "Content-Type": "application/json" }, body });
 })();

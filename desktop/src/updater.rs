@@ -7,6 +7,7 @@
 //!   POST /__desktop/update/probe（参照先の「確かめる」: この PC での見え方で置き場を探す）
 
 use crate::brand::brand;
+use da_core::distribute::{self, Who};
 use da_core::release::{self, newer};
 use da_core::update::{self, Paths};
 use serde_json::{json, Map, Value};
@@ -24,6 +25,26 @@ pub struct Updater {
     pub current: String,
     state: Mutex<Map<String, Value>>,
     wake: (Mutex<bool>, Condvar),
+    /// 版を置いている最中の進み具合（1 台で同時に置けるのは 1 本）
+    placing: Mutex<Option<Value>>,
+}
+
+/// 置き場の設定（参照先 update.source）に、配る入口から入れた PC が控えた置き場を後ろの候補として足す。
+pub fn source_with_entry(paths: &Paths, source: &str) -> String {
+    match distribute::remembered_entry(paths) {
+        Some(dir) if !source.contains(&*dir.to_string_lossy()) => {
+            if source.trim().is_empty() {
+                dir.display().to_string()
+            } else {
+                format!("{source};{}", dir.display())
+            }
+        }
+        _ => source.to_string(),
+    }
+}
+
+fn who_of(settings: &Value) -> Who {
+    Who { login: settings["who"]["login"].as_str().unwrap_or("").into(), pc: settings["who"]["pc"].as_str().unwrap_or("").into() }
 }
 
 impl Updater {
@@ -35,7 +56,14 @@ impl Updater {
         if !installed {
             st.insert("detail".into(), json!("この PC のアプリ（作業場所の app）で動いていないので、更新は取り込みません"));
         }
-        Arc::new(Updater { paths, installed, current, state: Mutex::new(st), wake: (Mutex::new(false), Condvar::new()) })
+        Arc::new(Updater {
+            paths,
+            installed,
+            current,
+            state: Mutex::new(st),
+            wake: (Mutex::new(false), Condvar::new()),
+            placing: Mutex::new(None),
+        })
     }
 
     /// 画面へ（GET /__desktop/update）。
@@ -84,7 +112,7 @@ impl Updater {
             Ok(v) => v,
             Err(e) => return self.set(json!({"state": "error", "problem": format!("更新の置き場の設定を読めません: {e}")})),
         };
-        let source = settings["source"].as_str().unwrap_or("").to_string();
+        let source = source_with_entry(&self.paths, settings["source"].as_str().unwrap_or(""));
         let checked = chrono::Local::now().format("%Y-%m-%d %H:%M").to_string();
         {
             let mut s = self.state.lock().unwrap();
@@ -153,6 +181,66 @@ impl Updater {
                 self.set(json!({"state": "error", "problem": format!("版 {} を取り込めません: {e}", target.version)}));
             }
         }
+    }
+
+    /// 配布の画面（GET /__desktop/release）。settings は Python の /api/update/settings（置き場と、だれか）。
+    pub fn release_view(&self, settings: &Value) -> Value {
+        let b = brand();
+        let who = &settings["who"];
+        let me = json!({"canRelease": who["canRelease"] == true, "role": who["role"], "login": who["login"], "pc": who["pc"],
+                        "current": self.current});
+        let source = source_with_entry(&self.paths, settings["source"].as_str().unwrap_or(""));
+        match release::locate_source(&source) {
+            Ok((found, adjusted)) => distribute::view(&found, adjusted, &source, &b.app_id, &b.name, me),
+            Err(e) => json!({"reachable": false, "why": e, "folder": source, "found": null, "me": me, "versions": []}),
+        }
+    }
+
+    /// 置いている最中の進み具合（GET /__desktop/release/progress）。
+    pub fn place_progress(&self) -> Value {
+        self.placing.lock().unwrap().clone().unwrap_or_else(|| json!({"state": "idle"}))
+    }
+
+    /// 画面から選んだ ZIP（読み終えたバイト列）を置き場に置く（POST /__desktop/release/place）。→ Ok(release.json) か (状態, 理由)
+    pub fn place(&self, settings: &Value, file_name: &str, body: &[u8]) -> Result<Value, (u16, String)> {
+        let b = brand();
+        if settings["who"]["canRelease"] != true {
+            return Err((403, "版を置けるのは、開発者・メンテナンス者だけです（切断中の PC も置けません）。".into()));
+        }
+        let (found, _) = release::locate_source(settings["source"].as_str().unwrap_or("")).map_err(|e| (400, e))?;
+        {
+            let mut g = self.placing.lock().unwrap();
+            if g.as_ref().is_some_and(|v| v["state"] == "running") {
+                return Err((409, "ほかの版を置いている最中です。終わってからもう一度選んでください。".into()));
+            }
+            *g = Some(json!({"state": "running", "stage": "check", "done": 0, "total": 0, "elapsed": 0.0}));
+        }
+        let t0 = std::time::Instant::now();
+        let dl = self.paths.work().join(format!("place-{}.zip", std::process::id()));
+        let result = (|| {
+            std::fs::create_dir_all(self.paths.work()).map_err(|e| e.to_string())?;
+            std::fs::write(&dl, body).map_err(|e| format!("受け取った ZIP を書けません: {e}"))?;
+            let progress = |stage: &str, done: u64, total: u64| {
+                *self.placing.lock().unwrap() = Some(json!({"state": "running", "stage": stage, "done": done, "total": total,
+                                                             "elapsed": t0.elapsed().as_secs_f64()}));
+            };
+            distribute::place(&self.paths, &found, &dl, file_name, &b.app_id, &who_of(settings), &progress)
+        })();
+        let _ = std::fs::remove_file(&dl);
+        let state = if result.is_ok() { "done" } else { "failed" };
+        *self.placing.lock().unwrap() = Some(json!({"state": state, "elapsed": t0.elapsed().as_secs_f64()}));
+        result.map_err(|e| (400, e))
+    }
+
+    /// 配る版を決める（POST /__desktop/release/distribute）。
+    pub fn distribute(&self, settings: &Value, version: &str) -> Result<Value, (u16, String)> {
+        if settings["who"]["canRelease"] != true {
+            return Err((403, "配る版を決められるのは、開発者・メンテナンス者だけです（切断中の PC も決められません）。".into()));
+        }
+        let (found, _) = release::locate_source(settings["source"].as_str().unwrap_or("")).map_err(|e| (400, e))?;
+        let r = distribute::set_distributed(&found, version, &brand().app_id, &who_of(settings)).map_err(|e| (400, e))?;
+        self.wake();
+        Ok(r)
     }
 
     /// 参照先の「確かめる」（この PC での見え方で探し、見つけた版を言う）。
