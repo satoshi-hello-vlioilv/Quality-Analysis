@@ -30,6 +30,8 @@ jobs:
       - name: test（Python・アプリ）
         working-directory: program
         run: python -m unittest discover -s tests -t .
+      - name: test（Python・配る ZIP の組み立て）
+        run: python -m unittest discover -s desktop/bundle -t desktop/bundle
 
   desktop:
     runs-on: ubuntu-latest
@@ -81,6 +83,9 @@ jobs:
               print("ERROR:", r["error"])
           sys.exit(0 if r.get("ok") else 1)
           PY
+      # 更新の通し（desktop/bundle/verify.py）: 共有から写る → 裏で取り込む → 次の起動で入れ替わる → 壊れた版は控えへ戻す → 配る版を戻す
+      - name: 更新の通し（本物の窓・WebKitGTK）
+        run: xvfb-run -a python desktop/bundle/verify.py update --exe desktop/target/debug/$(python desktop/bundle/bundle.py brand exe | sed 's/\.exe$//') --work "$RUNNER_TEMP/verify"
       - name: 記録
         if: always()
         run: tail -n 40 "$RUNNER_TEMP"/root/logs/*.log || true

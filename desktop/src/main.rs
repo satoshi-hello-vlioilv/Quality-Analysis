@@ -15,9 +15,11 @@ mod locate;
 mod proc;
 mod router;
 mod sidecar;
+mod updater;
 
 use brand::brand;
 use da_core::lot::Lot;
+use da_core::update::{self, Paths};
 use router::{error_reply, After, Backend, Native, Router};
 use serde_json::json;
 use sidecar::{Ask, Progress, Reply, Supervisor};
@@ -27,6 +29,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tauri::webview::{DownloadEvent, NewWindowResponse, PageLoadEvent};
 use tauri::{AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use updater::Updater;
 
 /// 自前の仕組みの名前。program/sidecar.py の BASE_URL（http://tpa.localhost/）と同じ（食い違うと URL の組み立てがずれる）。
 const SCHEME: &str = "tpa";
@@ -115,7 +118,7 @@ fn selftest_finish(app: &AppHandle, result: &serde_json::Value) {
 }
 
 /// 窓そのものが答える問い合わせ（終了・窓の情報・自己診断の受け口・異常ロット一覧）。
-fn native(app: AppHandle, info: serde_json::Value, lot: Arc<Lot>) -> Native {
+fn native(app: AppHandle, info: serde_json::Value, lot: Arc<Lot>, upd: Arc<Updater>) -> Native {
     Box::new(move |req, backend| match (req.method, req.path) {
         // 画面の「終了」・版が混ざったときの「再起動する」。答えてから閉じる（中身の Python は入力が閉じて自分で終わる）
         ("POST", "/api/shutdown") => {
@@ -128,6 +131,29 @@ fn native(app: AppHandle, info: serde_json::Value, lot: Arc<Lot>) -> Native {
             Some(json_reply(&json!({"ok": true})))
         }
         ("GET", "/__desktop/info") => Some(json_reply(&info)),
+        // 更新の係（updater.rs）
+        ("GET", "/__desktop/update") => Some(json_reply(&upd.status())),
+        ("POST", "/__desktop/update/check") => {
+            upd.wake();
+            Some(json_reply(&json!({"ok": true})))
+        }
+        ("POST", "/__desktop/update/probe") => {
+            let v: serde_json::Value = serde_json::from_slice(req.body).unwrap_or_default();
+            Some(json_reply(&Updater::probe(v["value"].as_str().unwrap_or(""))))
+        }
+        ("POST", "/__desktop/update/apply") => {
+            if upd.status()["state"] != "ready" || !upd.installed {
+                return Some(Reply {
+                    status: 409, ..json_reply(&json!({"error": "開き直して入れ替える版がありません。"}))
+                });
+            }
+            let ready = upd.status()["ready"].clone();
+            log(&format!("UPDATE 開き直して {ready} にします"));
+            Some(match relaunch(&app, &upd.paths) {
+                Ok(()) => json_reply(&json!({"ok": true})),
+                Err(e) => Reply { status: 500, ..json_reply(&json!({"error": e})) },
+            })
+        }
         ("GET", "/__desktop/downloads") => Some(json_reply(&json!(downloads().lock().map(|v| v.clone()).unwrap_or_default()))),
         ("POST", "/__desktop/selftest") => {
             let result: serde_json::Value =
@@ -150,13 +176,43 @@ fn lot_settings(backend: &dyn Backend) -> Result<serde_json::Value, String> {
     serde_json::from_slice(&r.body).map_err(|e| e.to_string())
 }
 
+/// 更新の置き場の設定を中身（Python）に尋ねる。
+fn update_settings(backend: &dyn Backend) -> Result<serde_json::Value, String> {
+    let r = backend.ask(&Ask { method: "GET", path: "/api/update/settings", query: "", headers: vec![], body: &[] });
+    if r.status != 200 {
+        return Err(format!("更新の設定を読めません（{}）", r.status));
+    }
+    serde_json::from_slice(&r.body).map_err(|e| e.to_string())
+}
+
 /// 中身が答えたあとに窓が見ること: 参照先（設定）を保存したら、一覧の設定を尋ね直す（元ファイル・間隔をすぐ当て直す）。
-fn after(lot: Arc<Lot>) -> After {
+/// 更新の置き場を保存したら、すぐ確かめる。
+fn after(lot: Arc<Lot>, upd: Arc<Updater>) -> After {
     Box::new(move |method, path, status| {
         if method == "PUT" && status == 200 && path.starts_with("/api/settings/") {
             lot.invalidate();
+            if path.starts_with("/api/settings/update.") {
+                upd.wake();
+            }
         }
     })
+}
+
+/// 入口（この PC の app の exe）で開き直して、この窓を閉じる。入口はこの窓が終わるのを待ってから、版ごとの写しへ渡す。
+fn relaunch(app: &AppHandle, paths: &Paths) -> Result<(), String> {
+    let entry = paths.app().join(&brand().exe);
+    std::process::Command::new(&entry)
+        .args(["--wait-pid", &std::process::id().to_string()])
+        .current_dir(paths.app())
+        .spawn()
+        .map_err(|e| format!("開き直せません（{}）: {e}", entry.display()))?;
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(QUIT_DELAY);
+        log("EXIT 開き直す（入口へ渡した）");
+        app.exit(0);
+    });
+    Ok(())
 }
 
 fn json_reply(v: &serde_json::Value) -> Reply {
@@ -262,6 +318,29 @@ fn start(app: AppHandle, slot: Arc<OnceLock<AppRouter>>, splash: Arc<Splash>) {
         Err(e) => return splash.fail(&app, "アプリの中身が見つかりません", &e),
     };
     splash.step(&app, "program", "ok", &program.display().to_string());
+    // この PC のアプリ（app）で動いているなら、取り込み済みの版で入れ替える（Python を起こす前・updater.rs / update.rs）
+    let paths = Paths::new(&locate::local_root());
+    let installed = same_dir(&program, &paths.app().join("program"));
+    let mut notes = vec![];
+    if installed {
+        match update::apply_staged(&paths, &brand().exe) {
+            Ok(Some(a)) => {
+                log(&format!("UPDATE {} → {} に入れ替えました", a.from, a.to));
+                splash.step(&app, "program", "ok", &format!("版 {} → {} に入れ替えました", a.from, a.to));
+                if a.exe_changed {
+                    splash.step(&app, "open", "now", "窓も新しくなったので、開き直しています…");
+                    if relaunch(&app, &paths).is_ok() {
+                        return;
+                    }
+                }
+            }
+            Ok(None) => {}
+            Err(e) => {
+                log(&format!("UPDATE 入れ替えられません: {e}"));
+                notes.push(format!("新しい版に入れ替えられませんでした（次に開いたときにもう一度試します）: {e}"));
+            }
+        }
+    }
     let py = match locate::python() {
         Ok(p) => p,
         Err(e) => {
@@ -289,10 +368,31 @@ fn start(app: AppHandle, slot: Arc<OnceLock<AppRouter>>, splash: Arc<Splash>) {
             s.ready.clone()
         }
         Err(e) => {
+            // 入れ替えた直後の版が起動できなかった → 控え（直前の版）へ戻して開き直す
+            if installed {
+                if let Some(back) = update::revert(&paths) {
+                    log(&format!("UPDATE 版 {} が起動できないので {} に戻しました: {}", back.from, back.to, e.replace('\n', " / ")));
+                    splash.step(
+                        &app,
+                        "backend",
+                        "warn",
+                        &format!("版 {} が起動できないので、前の版 {} に戻して開き直します", back.from, back.to),
+                    );
+                    if relaunch(&app, &paths).is_ok() {
+                        return;
+                    }
+                }
+            }
             splash.step(&app, "backend", "bad", "起動できません");
             return splash.fail(&app, "アプリの中身（Python）が起動できません", &e);
         }
     };
+    if installed {
+        update::confirm(&paths);
+        if let Ok(me) = std::env::current_exe() {
+            std::thread::spawn(move || update::cleanup_copies(&Paths::new(&locate::local_root()), &me));
+        }
+    }
     let version = ready["version"].as_str().unwrap_or("?").to_string();
     log(&format!("READY version={version} elapsed={:.2} spawn_ms={}", ready["elapsed"].as_f64().unwrap_or(0.0), t0.elapsed().as_millis()));
     splash.step(&app, "backend", "ok", &format!("版 {version} ・ {:.1} 秒", t0.elapsed().as_secs_f64()));
@@ -300,11 +400,21 @@ fn start(app: AppHandle, slot: Arc<OnceLock<AppRouter>>, splash: Arc<Splash>) {
         "shell": "tauri", "app_id": brand().app_id, "shell_version": env!("CARGO_PKG_VERSION"), "commit": env!("TPA_BUILD_COMMIT"), "protocol": sidecar::PROTOCOL,
         "serves": sidecar::SERVES, "program": program, "python": py_text, "local_root": locate::local_root(),
         "exe": std::env::current_exe().unwrap_or_default(), "backend": ready, "url": app_url("/").as_str(),
+        "installed": installed, "app": paths.app(),
     });
+    let upd = Updater::new(paths, installed, version.clone(), notes);
     let static_dir = program.join("app").join("static");
     // 異常ロット一覧（写しは作業場所の db_cache・Python と同じ台帳）
     let lot = Arc::new(Lot::new(locate::local_root().join("db_cache")));
-    let _ = slot.set(Router { static_dir, backend: sup, native: native(app.clone(), info, lot.clone()), after: after(lot.clone()) });
+    let _ = slot.set(Router {
+        static_dir,
+        backend: sup,
+        native: native(app.clone(), info, lot.clone(), upd.clone()),
+        after: after(lot.clone(), upd.clone()),
+    });
+    // 更新の係: 使っている間に置き場を確かめ、新しい版を取り込んでおく（入れ替えは次の起動の最初）
+    let ask_slot = slot.clone();
+    upd.run(move || ask_slot.get().ok_or("起動中です".to_string()).and_then(|r| update_settings(&r.backend)), log);
     // 起動の直後から写し始める（一覧を開いたときに待たせない）
     let warm = slot.clone();
     std::thread::spawn(move || {
@@ -318,7 +428,71 @@ fn start(app: AppHandle, slot: Arc<OnceLock<AppRouter>>, splash: Arc<Splash>) {
     }
 }
 
+fn same_dir(a: &std::path::Path, b: &std::path::Path) -> bool {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(x), Ok(y)) => x == y,
+        _ => a == b,
+    }
+}
+
+/// 引数 `--name <数>`。
+fn arg_u32(name: &str) -> Option<u32> {
+    let args: Vec<String> = std::env::args().collect();
+    args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).and_then(|v| v.parse().ok())
+}
+
+/// 開発の作業ツリー（program の隣に .git）・引き継がない指定（--here・TPA_NO_HANDOFF）。この PC へ写さず、そのまま動く。
+fn dev_mode() -> bool {
+    std::env::args().any(|a| a == "--here")
+        || std::env::var_os("TPA_NO_HANDOFF").is_some()
+        || locate::program_dir().is_ok_and(|p| p.parent().is_some_and(|r| r.join(".git").exists()))
+}
+
+/// 起動のはじめ（窓を作る前）: 入口なら版ごとの写しへ渡し、共有などの配る形ならこの PC へ写してから入口を開く。
+/// 渡したら true（この exe は終わる）。
+fn hand_off() -> bool {
+    if let Some(pid) = arg_u32("--wait-pid") {
+        proc::wait_gone(pid, Duration::from_secs(30));
+    }
+    let Ok(me) = std::env::current_exe() else { return false };
+    let b = brand();
+    let paths = Paths::new(&locate::local_root());
+    let spawn = |exe: &std::path::Path, args: &[String]| {
+        std::process::Command::new(exe).args(args).current_dir(exe.parent().unwrap_or(std::path::Path::new("."))).spawn().is_ok()
+    };
+    let pid = std::process::id().to_string();
+    match update::plan(&paths, &me, &b.exe, dev_mode()) {
+        update::Step::Stay => false,
+        update::Step::Handoff => match update::copy_for_run(&paths, &me) {
+            Ok(copy) => {
+                let program = paths.app().join("program").display().to_string();
+                spawn(&copy, &["--program".into(), program, "--wait-pid".into(), pid])
+            }
+            Err(e) => {
+                log(&format!("START 版ごとの写しを作れないので、入口のまま開きます: {e}"));
+                false
+            }
+        },
+        update::Step::Localize(dist) => {
+            let version = update::validate_dist(&dist, &b.exe, &b.app_id, None).unwrap_or_default();
+            if update::should_localize(&paths, &version) {
+                match update::localize(&paths, &dist, &b.exe, &b.app_id) {
+                    Ok(v) => log(&format!("INSTALL {} からこの PC へ写しました（版 {v}）", dist.display())),
+                    Err(e) => {
+                        log(&format!("INSTALL この PC へ写せないので、共有のまま開きます: {e}"));
+                        return false;
+                    }
+                }
+            }
+            spawn(&paths.app().join(&b.exe), &["--wait-pid".into(), pid])
+        }
+    }
+}
+
 fn main() {
+    if hand_off() {
+        return;
+    }
     let slot: Arc<OnceLock<AppRouter>> = Arc::default();
     let splash: Arc<Splash> = Arc::default();
     let proto_slot = slot.clone();

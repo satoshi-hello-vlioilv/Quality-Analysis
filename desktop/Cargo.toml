@@ -1,6 +1,6 @@
 [package]
 name = "defect-analyzer-desktop"
-version = "3.9.0"
+version = "3.10.0"
 description = "Defect-Analyzer（転写距離・ピッチ解析）デスクトップ版の窓"
 edition = "2021"
 rust-version = "1.90"
@@ -32,6 +32,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 # 品質データ（SQLite）を引く（src/lotlist.rs）。SQLite は exe に入れる（どの PC でも同じ版・窓関数が使える）
 rusqlite = { version = "0.37", features = ["bundled", "functions", "backup"] }
+# 更新: 配る ZIP を展開する・指紋（SHA-256）を確かめる（src/update.rs）
+zip = { version = "2", default-features = false, features = ["deflate"] }
+sha2 = "0.10"
 # 「N 日以内」の今日（この PC の暦）
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 

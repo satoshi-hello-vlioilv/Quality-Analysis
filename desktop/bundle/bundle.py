@@ -93,7 +93,7 @@ def build(exe: Path, out: Path) -> dict:
     rel = release_json(b, version, zip_name, sha)
     (out / "release.json").write_text(json.dumps(rel, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     (out / f"{zip_name}.sha256").write_text(f"{sha}  {zip_name}\n", encoding="ascii")
-    summary = {"zip": str(zpath), "files": n, "bytes": zpath.stat().st_size, "stage": str(stage), **rel}
+    summary = {**rel, "path": str(zpath), "files": n, "bytes": zpath.stat().st_size, "stage": str(stage)}
     print(json.dumps(summary, ensure_ascii=False, indent=1))
     return summary
 
