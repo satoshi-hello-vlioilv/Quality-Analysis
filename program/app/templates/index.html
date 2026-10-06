@@ -90,6 +90,13 @@
       <span id="llGroupBar" class="ll-groupbar" hidden></span>
       <span id="llCardShelf" class="lk-shelf" hidden role="toolbar" aria-label="開いているカード"></span>
       <span id="llCardHint" class="ll-hint" hidden title="「表の見せ方」の「機能」で使わないようにもできます">行をダブルクリックするとカードで見られます</span>
+      <!-- 一覧だけを一時的に拡大（この窓を閉じると 100% に戻る）。100% でないときは数字を強めて「戻す」を出す -->
+      <span id="llZoom" class="ll-zoom" title="一覧だけを一時的に拡大・縮小します（窓を閉じると 100% に戻ります）">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.6"/><path d="M10.4 10.4 14 14"/></svg>
+        <input id="llZoomRange" type="range" min="60" max="200" step="10" value="100" aria-label="一覧の大きさ">
+        <output id="llZoomValue" for="llZoomRange">100%</output>
+        <button id="llZoomReset" type="button" hidden title="100% に戻します">100%に戻す</button>
+      </span>
       <div class="ll-pager">
         <button id="llPrev" type="button" aria-label="前のページ">◀</button>
         <span id="llRange">0</span>

@@ -117,6 +117,32 @@
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 0);
     },
+    /** 設定を JSON のファイルに書き出す（形は WaveLog と同じ {kind, version, savedAt, items}）。読むのは pickJson。 */
+    saveJson(kind, items, name) {
+      const body = JSON.stringify({ kind, version: 1, savedAt: new Date().toISOString(), items }, null, 1);
+      TPA.download(new Blob([body], { type: "application/json" }), name);
+    },
+    /** saveJson で書いた設定のファイルを選ばせて読む → items（1件以上）。選ばずに閉じたら null。
+        別の種類（kind）・壊れたファイルは、何が違うかを言う Error で投げる（what: 「表示列」など、誤りの文に使う名前）。
+        kind が null なら種類を問わない（表示列: WaveLog など、前から読めていたファイルを読めなくしない）。 */
+    pickJson(kind, what) {
+      return new Promise((resolve, reject) => {
+        const input = Object.assign(document.createElement("input"), { type: "file", accept: ".json,application/json" });
+        input.addEventListener("cancel", () => resolve(null));
+        input.addEventListener("change", async () => {
+          const file = input.files[0]; if (!file) { resolve(null); return; }
+          try {
+            let d;
+            try { d = JSON.parse(await file.text()); } catch (_) { throw new Error(`「${file.name}」は設定のファイル（JSON）として読めません`); }
+            if (!d || (kind && d.kind !== kind)) throw new Error(`「${file.name}」は${what}の設定ファイルではありません`);
+            const items = Array.isArray(d.items) ? d.items.filter((x) => x && typeof x === "object") : [];
+            if (!items.length) throw new Error(`「${file.name}」に${what}の設定が入っていません`);
+            resolve(items);
+          } catch (e) { reject(e); }
+        });
+        input.click();
+      });
+    },
     /** 値だけの深い写し（設定・下書きを元と切り離す）。 */
     clone: (v) => JSON.parse(JSON.stringify(v)),
 

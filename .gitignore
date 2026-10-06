@@ -1,0 +1,3 @@
+# Python が試験・起動のときに作るキャッシュ（配る物にも入れない: desktop/bundle/test_bundle.py）
+__pycache__/
+*.pyc

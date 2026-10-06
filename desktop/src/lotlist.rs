@@ -160,7 +160,31 @@ pub fn connect_ro(path: &Path) -> Result<Connection, String> {
     add("ToDate", 1, utf8 | FunctionFlags::SQLITE_DETERMINISTIC, |ctx| {
         Ok(pyfmt::to_date(&py_of(ctx.get_raw(0))).map(SqlValue::Text).unwrap_or(SqlValue::Null))
     })?;
+    add("SortKey", 1, utf8 | FunctionFlags::SQLITE_DETERMINISTIC, |ctx| Ok(sort_key(&py_of(ctx.get_raw(0)))))?;
     Ok(c)
+}
+
+/// 並べ替えの鍵（Python の sqlite_ro.sort_key と同じ）: 空欄（NULL・空白だけ）は NULL、数と数に読める字は数、
+/// ほかは前後の空白を除いた字。一覧の「並び・まとめ」で同じ値と見る物を、並べ替えでも隣へ寄せる。
+pub fn sort_key(v: &Py) -> SqlValue {
+    match v {
+        Py::None => SqlValue::Null,
+        Py::Int(i) => SqlValue::Integer(*i),
+        Py::Float(f) => SqlValue::Real(*f),
+        _ => {
+            let text = v.cstr();
+            let s = pyfmt::strip(&text);
+            if s.is_empty() {
+                return SqlValue::Null;
+            }
+            if s.bytes().any(|b| b.is_ascii_digit()) && s.bytes().all(|b| b"0123456789.eE+-".contains(&b)) {
+                if let Ok(f) = s.parse::<f64>() {
+                    return SqlValue::Real(f);
+                }
+            }
+            SqlValue::Text(s.to_string())
+        }
+    }
 }
 
 fn sql_err(e: rusqlite::Error) -> String {
@@ -411,6 +435,15 @@ fn safe_sorts(text: &str, cs: &[String]) -> Vec<(String, &'static str)> {
     out
 }
 
+/// 並べ替えに使う式（Python の lot_list.order_key と同じ）。ロット番号の列は大小を同じに見る。
+fn order_key(col: &str, lot: &str) -> String {
+    if col == lot {
+        format!("SortKey(UPPER(CStr({})))", qi(col))
+    } else {
+        format!("SortKey({})", qi(col))
+    }
+}
+
 fn lot_key(col: &str) -> String {
     format!("UPPER(TRIM(CStr({})))", qi(col))
 }
@@ -434,7 +467,7 @@ pub fn grouped_sql(t: &str, raw_cs: &[String], lot: &str, wh: &str, order: &[(St
     let over = if order.is_empty() {
         String::new()
     } else {
-        format!("ORDER BY {}", order.iter().map(|(c, d)| format!("{} {d}", qi(c))).collect::<Vec<_>>().join(","))
+        format!("ORDER BY {}", order.iter().map(|(c, d)| format!("{} {d}", order_key(c, lot))).collect::<Vec<_>>().join(","))
     };
     let cols = raw_cs.iter().map(|x| qi(x)).collect::<Vec<_>>().join(", ");
     let steps = "
@@ -596,16 +629,16 @@ pub fn query(path: &Path, a: &Args, preferred_table: &str, default_page_size: i6
     where_parts.extend(fp);
     params.extend(fpp);
     let wh = if where_parts.is_empty() { String::new() } else { format!(" WHERE {}", where_parts.join(" AND ")) };
+    let lot = lot_column(&cs);
     let order_parts = safe_sorts(&a.sorts, &cs);
     let order = if order_parts.is_empty() {
         String::new()
     } else {
-        format!(" ORDER BY {}", order_parts.iter().map(|(c, d)| format!("{} {d}", qi(c))).collect::<Vec<_>>().join(","))
+        format!(" ORDER BY {}", order_parts.iter().map(|(c, d)| format!("{} {d}", order_key(c, &lot))).collect::<Vec<_>>().join(","))
     };
     let qt = qi(&t);
     let total = count(&c, &format!("SELECT COUNT(*) FROM {qt}{wh}"), &params)?;
     let start = (page - 1).saturating_mul(size);
-    let lot = lot_column(&cs);
     let mut out = Map::new();
     let (rows, first, last) = if a.group && !lot.is_empty() {
         let sql = grouped_sql(&t, &raw_cs, &lot, &wh, &order_parts, size, rowid_name(&c, &t, &raw_cs));
@@ -674,5 +707,23 @@ mod tests {
         assert_eq!(cutoff_date("within_weeks", "1.9", d).unwrap(), "2026-03-24", "小数は切り捨て");
         assert_eq!(cutoff_date("within_days", "-5", d).unwrap(), "2026-03-31", "負は 0");
         assert!(cutoff_date("within_days", "inf", d).is_err());
+    }
+
+    #[test]
+    fn sort_key_like_python() {
+        let k = |v: Py| sort_key(&v);
+        for blank in ["", "  ", "\u{3000}"] {
+            assert_eq!(k(Py::Text(blank)), SqlValue::Null, "空欄はまとめる");
+        }
+        assert_eq!(k(Py::None), SqlValue::Null);
+        assert_eq!(k(Py::Int(54)), SqlValue::Integer(54));
+        assert_eq!(k(Py::Text(" 54 ")), SqlValue::Real(54.0), "数に読める字は数");
+        assert_eq!(k(Py::Text("1e-05")), SqlValue::Real(1e-05));
+        assert_eq!(k(Py::Text("+.5")), SqlValue::Real(0.5));
+        assert_eq!(k(Py::Text("2.")), SqlValue::Real(2.0));
+        for (v, want) in [(" 100%", "100%"), ("1-2", "1-2"), ("e5", "e5"), ("a]b ", "a]b"), ("Ｌ－１", "Ｌ－１")] {
+            assert_eq!(k(Py::Text(v)), SqlValue::Text(want.into()));
+        }
+        assert_eq!(k(Py::Blob(b"\x00\x01")), SqlValue::Text("b'\\x00\\x01'".into()));
     }
 }

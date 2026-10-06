@@ -5,7 +5,7 @@
   確認のつもりの1行が唯一の失敗原因になる。開けなかったときだけ理由を切り分ける。
 - UNC（\\\\server\\share\\…）は 4 スラッシュの file:////server/share/… にする
   （2 スラッシュだと server を URI の authority と読まれ、標準の sqlite3 は拒否する）。
-- WaveLog の SQL と同じ方言で書けるよう、Access 風の CStr / Val / Nz を登録する。
+- WaveLog の SQL と同じ方言で書けるよう、Access 風の CStr / Val / Nz を登録する（ほかに ToDate・SortKey）。
 - `with connect_ro(...) as c:` を抜けたら閉じる（標準の sqlite3 は with で閉じないので、閉じるのが
   ガベージコレクション任せになり、Windows では写しの古い世代を消せないことがある）。
 """
@@ -32,6 +32,28 @@ def _val(v):
 
 def _nz(v, default):
     return default if v is None else v
+
+
+_NUM_CHARS = frozenset("0123456789.eE+-")
+
+
+def sort_key(v):
+    """並べ替えの鍵（SQL では SortKey(列)）。一覧の「並び・まとめ」で同じ値と見る物を、並べ替えでも隣へ寄せる:
+    空欄（NULL・空白だけ）は NULL、数と数に読める字（' 54'・'1e-05'）は数、ほかは前後の空白を除いた字。
+    画面（lotlist.js の sortKey）とデスクトップ版（desktop/src/lotlist.rs の sort_key）も同じ見分け。"""
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return v
+    s = _cstr(v).strip()
+    if not s:
+        return None
+    if set(s) <= _NUM_CHARS and any(ch.isdigit() for ch in s):
+        try:
+            return float(s)
+        except ValueError:
+            pass
+    return s
 
 
 _DATE_PATTERNS = (
@@ -103,4 +125,5 @@ def connect_ro(path, timeout=10):
     c.create_function("Val", 1, _val)
     c.create_function("Nz", 2, _nz)
     c.create_function("ToDate", 1, to_date, deterministic=True)
+    c.create_function("SortKey", 1, sort_key, deterministic=True)
     return c

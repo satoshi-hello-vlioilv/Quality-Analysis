@@ -227,6 +227,11 @@ def safe_sorts(text, cs):
     return out
 
 
+def order_key(col, lot=""):
+    """並べ替えに使う式（画面のまとめの見分けと同じ鍵）。ロット番号の列は大小を同じに見る（lot_key と同じ）。"""
+    return f"SortKey(UPPER(CStr({qi(col)})))" if col == lot else f"SortKey({qi(col)})"
+
+
 def lot_key(col):
     """まとめるときのロットの見分け方（大小・前後の空白は同じロット）。"""
     return f"UPPER(TRIM(CStr({qi(col)})))"
@@ -273,7 +278,7 @@ def grouped_rows(c, t, raw_cs, lot, where, params, order_parts, page, size):
 
 def grouped_sql(t, raw_cs, lot, where, order_parts, size, rid=None):
     """まとめた並びの SQL（デスクトップ版の Rust・desktop/src/lotlist.rs も同じ文を作る）。最後の ? はページ。"""
-    over = ("ORDER BY " + ",".join(f"{qi(col)} {d}" for col, d in order_parts)) if order_parts else ""
+    over = ("ORDER BY " + ",".join(f"{order_key(col, lot)} {d}" for col, d in order_parts)) if order_parts else ""
     cols = ", ".join(qi(x) for x in raw_cs)
     steps = """
         k AS (SELECT *, CASE WHEN _tpa_k0 = '' THEN '#' || _tpa_rn ELSE _tpa_k0 END AS _tpa_k FROM b),
@@ -326,11 +331,11 @@ def query(path, *, table="", preferred_table="", page=1, page_size=PAGE_SIZE_DEF
         where_parts += fp
         params += fpp
         where = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
+        lot = lot_column(cs)
         order_parts = safe_sorts(sorts, cs)
-        order = (" ORDER BY " + ",".join(f"{qi(col)} {d}" for col, d in order_parts)) if order_parts else ""
+        order = (" ORDER BY " + ",".join(f"{order_key(col, lot)} {d}" for col, d in order_parts)) if order_parts else ""
         count = int(c.execute(f"SELECT COUNT(*) FROM {qi(t)}" + where, params).fetchone()[0])
         start = (page - 1) * size
-        lot = lot_column(cs)
         grouped = {}
         if group and lot:
             rows, groups, first, last = grouped_rows(c, t, raw_cs, lot, where, params, order_parts, page, size)

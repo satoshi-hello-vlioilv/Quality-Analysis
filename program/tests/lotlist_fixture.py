@@ -117,6 +117,12 @@ CASES = [
     {"filters": _f(("発生日", "within_weeks", "2.9"))},
     {"search": "e+16"},
     {"filters": _f(("重量", "lt", "　１０００"))},
+    # 並び・まとめ（版 3.12.0）: 並べ替えは SortKey（空欄をまとめ・数に読める字は数・前後の空白を除く・ロット番号は大小を同じに）
+    {"sorts": _s(("数量", "asc"), ("備考", "desc"), ("客先", "asc"))},
+    {"sorts": _s(("板厚", "desc"), ("比重", "asc"))},
+    {"sorts": _s(("ロット番号", "desc"), ("不良名", "asc"))},
+    {"group": True, "sorts": _s(("ロット番号", "asc"), ("備考", "asc"), ("数量", "desc"))},
+    {"group": True, "sorts": _s(("不良名", "asc"), ("ロット番号", "desc")), "page": 2, "page_size": 120},
 ]
 
 

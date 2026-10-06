@@ -278,11 +278,12 @@
       e.preventDefault(); e.stopPropagation();
       const th = grip.closest("th"), c = th.dataset.col, t = ctx.target;
       if (get(t).locks.includes(c)) return;
-      const x0 = e.clientX, w0 = th.getBoundingClientRect().width;
+      // 幅は CSS の px（一覧を拡大していても offsetWidth は拡大前）。マウスの動きは拡大の倍率で割って同じ尺にする
+      const x0 = e.clientX, w0 = th.offsetWidth, k = th.getBoundingClientRect().width / (th.offsetWidth || 1) || 1;
       const colEl = ctx.grid.querySelector(`col[data-col="${CSS.escape(c)}"]`);
       document.body.classList.add("ll-resizing");
       const move = (ev) => {
-        const w = Math.round(Math.min(W_MAX, Math.max(W_MIN, w0 + ev.clientX - x0)));
+        const w = Math.round(Math.min(W_MAX, Math.max(W_MIN, w0 + (ev.clientX - x0) / k)));
         if (colEl) colEl.style.width = w + "px";
         hold(t, { widths: Object.assign({}, get(t).widths, { [c]: w }) });
         fitTableWidth();
@@ -392,7 +393,7 @@
         if (L.locks.includes(c)) patch(t, { locks: L.locks.filter((k) => k !== c) });
         else {
           const th = ctx.grid.querySelector(`th[data-col="${CSS.escape(c)}"]`);
-          const w = L.widths[c] || Math.round(th ? th.getBoundingClientRect().width : 120);
+          const w = L.widths[c] || (th ? th.offsetWidth : 120);
           patch(t, { locks: [...L.locks, c], widths: Object.assign({}, L.widths, { [c]: w }) });
         }
       } else if (b.dataset.tint) setTint(t, c, b.dataset.tint);
@@ -441,7 +442,6 @@
         <span class="lc-sp"></span>
         <button type="button" id="lcExport">書き出し…</button>
         <button type="button" id="lcImport">読み込み…</button>
-        <input type="file" id="lcImportFile" accept=".json,application/json" hidden>
       </div>
       <div class="lc-foot">
         <span id="lcCount"></span><span id="lcNote" class="lc-note"></span><span class="lc-sp"></span>
@@ -575,7 +575,7 @@
       const L = get(t), W = Object.assign({}, L.widths); let locks = L.locks.filter((k) => k !== c);
       if (r.value === "auto") delete W[c];
       else {
-        if (!W[c]) { const th = ctx.grid.querySelector(`th[data-col="${CSS.escape(c)}"]`); W[c] = Math.round(th ? th.getBoundingClientRect().width : 120); }
+        if (!W[c]) { const th = ctx.grid.querySelector(`th[data-col="${CSS.escape(c)}"]`); W[c] = th ? th.offsetWidth : 120; }   // 拡大前の幅
         if (r.value === "locked") locks = [...locks, c];
       }
       setL({ widths: W, locks });
@@ -744,16 +744,12 @@
     $("#lcExport").onclick = () => {
       const scopeAll = confirm("すべての表の設定を書き出しますか？\n［OK］すべての一覧　［キャンセル］この一覧だけ");
       const items = scopeAll ? Object.keys(saved).map((t) => ({ target: t, body: saved[t] })) : [{ target: ctx.target, body: get(ctx.target) }];
-      const blob = new Blob([JSON.stringify({ kind: "tpa-lotlist-column-layouts", version: 1, savedAt: new Date().toISOString(), items }, null, 1)], { type: "application/json" });
-      TPA.download(blob, `異常ロット一覧_表示列_${scopeAll ? "すべて" : ctx.table}.json`);
+      TPA.saveJson("tpa-lotlist-column-layouts", items, `異常ロット一覧_表示列_${scopeAll ? "すべて" : ctx.table}.json`);
     };
-    $("#lcImport").onclick = () => $("#lcImportFile").click();
-    $("#lcImportFile").onchange = async (e) => {
-      const file = e.target.files[0]; e.target.value = ""; if (!file) return;
+    $("#lcImport").onclick = async () => {
       try {
-        const d = JSON.parse(await file.text());
-        const items = (d && Array.isArray(d.items)) ? d.items : [];
-        if (!items.length) throw new Error("表示列の設定が入っていません");
+        const items = await TPA.pickJson(null, "表示列");   // 種類は問わない（前から読めていた形を読めなくしない）
+        if (!items) return;
         const mine = items.find((x) => x.target === ctx.target) || (items.length === 1 ? items[0] : null);
         items.filter((x) => x !== mine && x.target && x.target !== ctx.target).forEach((x) => { saved[x.target] = norm(x.body); });
         writeSaved();

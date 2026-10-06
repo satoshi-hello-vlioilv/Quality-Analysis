@@ -520,3 +520,38 @@ class GroupKeyedSqlTests(unittest.TestCase):
         view = lot_list.query(self.db, table="仕掛_ビュー", group=True, sorts='[{"column":"重量","dir":"desc"}]')
         table = lot_list.query(self.db, table="仕掛", group=True, sorts='[{"column":"重量","dir":"desc"}]')
         self.assertEqual((view["rows"], view["groups"], view["groupCount"]), (table["rows"], table["groups"], table["groupCount"]))
+
+
+class SortKeyTests(unittest.TestCase):
+    """並べ替えの鍵（SortKey）: 「並び・まとめ」で同じ値と見る物は、並べ替えでも隣り合う（版 3.12.0 まで、生の値で並べたため、
+    ' 100%' と '100%'・NULL と ''・字の '54' と数の 54 が離れ、2段目からの並びが途中で振り出しに戻った）。"""
+
+    def test_key(self):
+        from app.services.sqlite_ro import sort_key
+        self.assertEqual([sort_key(v) for v in (None, "", "  ", "　")], [None] * 4, "空欄はまとめる")
+        self.assertEqual([sort_key(v) for v in (54, " 54 ", "1e-05", "+.5", "2.")], [54, 54.0, 1e-05, 0.5, 2.0], "数に読める字は数")
+        self.assertEqual([sort_key(v) for v in (" 100%", "1-2", "e5", "a]b ", "Ｌ－１")], ["100%", "1-2", "e5", "a]b", "Ｌ－１"])
+        self.assertEqual(sort_key(b"\x00\x01"), str(b"\x00\x01"))
+
+    def test_levels_stay_together(self):
+        """段の値（画面の見分け）が同じ行は1か所に集まり、その中で下の段が並ぶ。"""
+        from app.services.sqlite_ro import sort_key
+        from tests import lotlist_fixture
+        with tempfile.TemporaryDirectory() as d:
+            db = os.path.join(d, "fx.sqlite3")
+            lotlist_fixture.make(db, 1500)
+            for levels in ([("備考", "asc"), ("数量", "desc")], [("客先", "desc"), ("板厚", "asc"), ("不良名", "asc")],
+                           [("ロット番号", "asc"), ("備考", "desc")]):
+                for group in ((False, True) if levels[0][0] == "ロット番号" else (False,)):   # 画面は先頭の段がロット番号のときだけ group
+                    with self.subTest(levels=levels, group=group):
+                        r = lot_list.query(db, page_size=2000, group=group,
+                                           sorts=json.dumps([{"column": c, "dir": d} for c, d in levels], ensure_ascii=False))
+                        key = lambda row, c: (sort_key(str(row[c] or "").upper()) if c == "ロット番号" else sort_key(row[c]))
+                        for k in range(len(levels)):
+                            seen, prev = set(), object()
+                            for row in r["rows"]:
+                                path = tuple(key(row, c) for c, _ in levels[:k + 1])
+                                if path != prev:
+                                    self.assertNotIn(path, seen, f"段{k + 1} {levels[k][0]} の {path} が2か所に分かれた")
+                                    seen.add(path)
+                                    prev = path
