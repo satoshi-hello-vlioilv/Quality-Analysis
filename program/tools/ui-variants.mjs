@@ -102,8 +102,13 @@ try {
   for (const theme of THEMES) {
     for (const p of TAKE) {
       const page = await app.newPage(theme, VIEW);
-      if (p.css) await page.addStyleTag({ content: p.css });
-      if (p.ops?.length) await page.evaluate(applyOps, p.ops);
+      // 案を当てる。状態の途中で頁を読み直しても（並び・まとめ）消えないよう、読み込むたびにも当てる
+      const install = `(() => { const go = () => { const css = ${JSON.stringify(p.css || "")};
+        if (css) document.head.append(Object.assign(document.createElement("style"), { textContent: css }));
+        (${applyOps})(${JSON.stringify(p.ops || [])}); };
+        document.readyState === "loading" ? addEventListener("DOMContentLoaded", go) : go(); })()`;
+      await page.addInitScript(install);
+      await page.evaluate(install);
       await walk(page, async (state, next) => {
         const id = `${state}-${theme}-${p.key}`;
         await page.screenshot({ path: path.join(OUT, `${id}.png`) });

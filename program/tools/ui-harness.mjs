@@ -3,7 +3,7 @@
 // 窓の代わりの開発用サーバー（ui_server.py。試験用の品質データ 1500 行）を起こし、Playwright の Chromium（WebView2 と同じ系統）で、
 // 利用者の画面と同じ大きさ（2160×1440・表示倍率 125% → 1728×1152）の頁を開く。
 // 窓だけが答える /__desktop/*（ショートカットの様子など）は作り物で答える（デスクトップのショートカットだけが欠けた PC）。
-// 状態（STATES）は、異常ロット一覧 → … → 更新履歴 の順に 1 つの頁で進める。
+// 状態（STATES）は、異常ロット一覧 → … → 更新履歴 → 表示列の設定 → マスタ管理 の順に 1 つの頁で進める。
 
 import { spawn, execSync } from "node:child_process";
 import { createRequire } from "node:module";
@@ -25,6 +25,15 @@ const INSTALL = {
   installed: true, runningFromApp: true, name: "Defect-Analyzer", appDir: "C:\\Users\\user\\AppData\\Local\\Defect-Analyzer\\app",
   shortcut: { links: [`${START}\\Defect-Analyzer.lnk`], places: [DESK, START], ask: false, declined: false },
 };
+/** 配布の置き場の作り物（版が 3 つ置いてあり、3.12.0 を配っている） */
+const BOX = "C:\\Users\\user\\Box\\Defect-Analyzer";
+const RELEASE = {
+  reachable: true, found: BOX, adjusted: false, folder: BOX, appFolder: BOX, problems: [],
+  distributed: { schema: 1, app_id: "defect-analyzer", version: "3.12.0", entry: "Defect-Analyzer.exe", setAt: "2026-10-06T16:40:00", setBy: "user", setPc: "PC-01", previous: "3.11.0" },
+  versions: ["3.13.0", "3.12.0", "3.11.0"].map((v, i) => ({ version: v, placedAt: `2026-10-0${8 - i * 2}T12:30:00`, placedPc: "PC-01", placedBy: "user", source: "desktop-windows", zip: `Defect-Analyzer-${v}-windows.zip`, bytes: 6816621, dir: `${BOX}\\${v}` })),
+  entry: { exists: true, path: `${BOX}\\Defect-Analyzer.exe` },
+  me: { canRelease: true, role: "開発者" },
+};
 // まとめて見る（並び・まとめ）の状態で使う段: 設備 ▲ → 不良名 ▲、繰り返しを省く
 const ARRANGE = { "仕掛": { levels: [{ column: "設備", dir: "asc", lot: false }, { column: "不良名", dir: "asc", lot: false }], heads: false, suppress: true } };
 
@@ -42,7 +51,9 @@ export async function launch() {
       const context = await browser.newContext({ viewport: view, deviceScaleFactor: 1.25, colorScheme: theme, locale: "ja-JP" });
       await context.route("**/__desktop/**", (route) => {
         const p = new URL(route.request().url()).pathname;
-        return p === "/__desktop/install" ? route.fulfill({ json: INSTALL }) : route.fulfill({ status: 404, json: { error: "作り物の窓は答えません" } });
+        if (p === "/__desktop/install") return route.fulfill({ json: INSTALL });
+        if (p === "/__desktop/release") return route.fulfill({ json: RELEASE });
+        return route.fulfill({ status: 404, json: { error: "作り物の窓は答えません" } });
       });
       await context.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.fulfill({ status: 200, body: "", headers: { "Content-Type": "text/css" } }));
       const page = await context.newPage();
@@ -62,7 +73,12 @@ export async function launch() {
 /** 開いている浮かぶ窓・メニューを閉じる（次の状態の前に） */
 async function closeAll(page) {
   for (let i = 0; i < 3; i++) await page.keyboard.press("Escape");
-  await sleep(200);
+  // Esc で閉じない窓（表示列の設定・マスタ管理）は閉じるボタンで
+  for (const sel of ["#llColumnPanel:not([hidden]) #lcClose", "#masterOverlay:not(.hidden) #masterCloseBtn"]) {
+    const b = await page.$(sel);
+    if (b) await b.click().catch(() => {});
+  }
+  await sleep(300);
 }
 
 // 状態: [名前, そこへ行く操作, 次に押すべきもの（新しい画面の data-next → 前の画面の部品 の順に探す）]
@@ -79,10 +95,25 @@ export const STATES = [
   ["calc", async (p) => { await closeAll(p); await p.click("#tabCalc"); await sleep(500); }, "[data-next], #query"],
   ["appmenu", async (p) => { await p.click("#appBtn"); await sleep(500); }, "[data-next], #amShortcut"],
   ["changelog", async (p) => { await closeAll(p); await p.click("#verBadge"); await sleep(600); }, "[data-next], #clClose"],
+  // 表示列の設定（一覧の「表示列」）: 開いた直後・列を 1 つ選んだところ
+  ["columns", async (p) => { await closeAll(p); await p.click("#tabList"); await sleep(300); await p.click("#llColBtn"); await sleep(600); }, "[data-next], #lcSave"],
+  ["columns-detail", async (p) => { await p.click('#lcList li[data-col="発生日"]').catch(() => p.click("#lcList li[data-col]")); await sleep(500); }, "[data-next], #lcSave"],
+  // マスタ管理: 設備・参照先・アクセス権限・利用状況・アプリの配布（タブは DOM で押す。区分ごとにタブを隠す案でも同じ所へ行けるように）
+  ["master", async (p) => { await closeAll(p); await p.click("#masterBtn"); await sleep(900); }, "[data-next], #masterAddBtn"],
+  ["master-paths", async (p) => { await tab(p, "paths"); await sleep(900); }, "[data-next], #masterSettings button"],
+  ["master-access", async (p) => { await tab(p, "access"); await sleep(800); }, "[data-next], #masterAddBtn"],
+  ["master-presence", async (p) => { await tab(p, "presence"); await sleep(800); }, "[data-next], #masterSettings button"],
+  ["master-release", async (p) => { await tab(p, "release"); await sleep(900); }, "[data-next], #masterSettings button"],
 ];
+
+/** マスタ管理のタブを押す（見えていなくても押す） */
+function tab(p, key) {
+  return p.$eval(`#masterTabs [data-tab="${key}"]`, (b) => b.click());
+}
 
 /** 状態を順に進め、各状態で visit(名前, 次に押すべきもの) を呼ぶ（only を渡せば、その状態だけ） */
 export async function walk(page, visit, only = null) {
+  page.setDefaultTimeout(5000);   // 見つからない部品で 30 秒止まらない
   for (const [name, go, next] of STATES) {
     try {
       await go(page);
@@ -139,8 +170,10 @@ export function measure(nextSelector) {
     return base;
   }
   // 開いている浮かぶ窓（重なる窓・メニュー）。あればその中だけを数える
-  const pops = [...document.querySelectorAll(".master-form-overlay:not(.hidden), .ll-viewmenu:not([hidden]), .app-menu:not(.hidden), .fb-cond-menu:not([hidden])")].filter(visible);
-  const dialog = pops.find((el) => el.classList.contains("master-form-overlay")) ?? null;
+  const DIALOGS = ".master-form-overlay:not(.hidden), .master-overlay:not(.hidden), #llColumnPanel:not([hidden])";
+  const pops = [...document.querySelectorAll(`${DIALOGS}, .ll-viewmenu:not([hidden]), .app-menu:not(.hidden), .fb-cond-menu:not([hidden])`)].filter(visible);
+  // 重なる窓（いちばん上の 1 枚）。あればその中だけを数える
+  const dialog = pops.filter((el) => el.matches(DIALOGS)).sort((a, b) => (Number(getComputedStyle(b).zIndex) || 0) - (Number(getComputedStyle(a).zIndex) || 0))[0] ?? null;
   const scope = (el) => !dialog || dialog.contains(el);
   const controls = [...document.querySelectorAll("button, a[href], input:not([type=hidden]), select, summary, [role=button]")].filter(visible);
   const seen = controls.filter((el) => inView(el.getBoundingClientRect()));
@@ -168,7 +201,7 @@ export function measure(nextSelector) {
     .map((sel) => [...document.querySelectorAll(sel)].find((el) => visible(el) && scope(el))).find(Boolean) ?? null;
   const primaries = [...document.querySelectorAll(".btn-primary")].filter((el) => visible(el) && scope(el) && inView(el.getBoundingClientRect())).length;
   const nr = next?.getBoundingClientRect();
-  const boxes = pops.map((el) => (el.classList.contains("master-form-overlay") ? el.firstElementChild : el)).filter(Boolean);
+  const boxes = pops.map((el) => (/overlay/.test(el.className) ? el.firstElementChild : el)).filter(Boolean);
   const hidden = Math.max(0, ...boxes.map((el) => el.scrollHeight - el.clientHeight));
   const cut = Math.max(0, ...boxes.map((el) => { const r = el.getBoundingClientRect(); return Math.max(r.bottom - innerHeight, r.right - innerWidth); }));
   // 一覧の見えている面積: 一覧の枠から、上に重なる欄（浮かぶ窓など）を 8px 刻みで除く

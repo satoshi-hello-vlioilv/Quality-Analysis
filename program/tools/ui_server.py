@@ -4,7 +4,10 @@
 標準の http.server で配る。program/tools/ui-check.mjs・ui-variants.mjs が撮影と測定に使う（ui-harness.mjs が起こす）。
 窓だけが答える /__desktop/* は、撮影の台本（ui-harness.mjs）が Playwright で作り物の答えを返す。
 
-    python -u tools/ui_server.py [ポート]
+    python -u tools/ui_server.py [ポート] [権限区分]
+
+権限区分（既定は 開発者）は、この PC の名乗りに効く権限を差し替える（マスタ管理の全部のタブ・配布を撮るため。
+アクセス権限のマスタは書き換えない）。一般ユーザーの見え方を撮るときは「一般ユーザー」を渡す。
 
 待ち受けを始めたら 1 行出す（台本はそれを待つ）。マスタ・手元の写し・画面の設定の控えは作業フォルダに置くので、
 リポジトリ（program/data など）を汚さない。
@@ -21,13 +24,22 @@ sys.path.insert(0, str(PROGRAM))
 
 from app import create_app  # noqa: E402
 from app.repositories.master_store import MasterStore  # noqa: E402
+from app.services import access  # noqa: E402
 from app.services.db_mirror import DbMirror  # noqa: E402
 from app.web import serve_http  # noqa: E402
 from tests import lotlist_fixture  # noqa: E402
 
 
+def as_role(role):
+    """この PC の名乗りに効く権限を role（マスタ編集は区分の上限）にする。"""
+    def flags(rows, login, pc):
+        return {"role": role, "masterEdit": access.master_edit_cap(role), "masterEditStored": "", "matchedId": None}
+    access.flags = flags
+
+
 def main():
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 5077
+    as_role(sys.argv[2] if len(sys.argv) > 2 else "開発者")
     share = WORK / "share.sqlite3"
     lotlist_fixture.make(str(share), 1500)
     app = create_app({"MASTER_STORE": MasterStore(PROGRAM, local_root=WORK / "masters", settings={}),
