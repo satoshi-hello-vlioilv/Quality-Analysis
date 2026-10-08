@@ -118,10 +118,8 @@ pub fn maintain(p: &Paths, places: &[PathBuf], io: &dyn LinkIo, n: &Names) -> Ve
         }
         for old in n.legacy.iter().filter(|o| **o != n.name) {
             let ol = d.join(link_name(old));
-            if io.read(&ol).is_some() && std::fs::remove_file(&ol).is_ok() {
-                if io.make(&link, &exe, &app, n.description).is_ok() {
-                    fixed.push(format!("{} を {} で作り直しました", ol.display(), link.display()));
-                }
+            if io.read(&ol).is_some() && std::fs::remove_file(&ol).is_ok() && io.make(&link, &exe, &app, n.description).is_ok() {
+                fixed.push(format!("{} を {} で作り直しました", ol.display(), link.display()));
             }
         }
     }

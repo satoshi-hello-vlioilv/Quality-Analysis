@@ -89,13 +89,17 @@ class DbMirror:
         changed = False
         with self._lock:
             if remote is not None and str(remote) != self.remote:
-                self.remote = str(remote); self._state = {}; changed = True
+                self.remote = str(remote)
+                self._state = {}
+                changed = True
             if interval_sec is not None:
                 iv = max(MIN_INTERVAL_SEC, int(interval_sec))
                 if iv != self.interval:
-                    self.interval = iv; changed = True
+                    self.interval = iv
+                    changed = True
             if stale_hours is not None and float(stale_hours) != self.stale_hours:
-                self.stale_hours = float(stale_hours); changed = True
+                self.stale_hours = float(stale_hours)
+                changed = True
         if changed and not self.passive:
             if self._thread is None or not self._thread.is_alive():
                 self.start()

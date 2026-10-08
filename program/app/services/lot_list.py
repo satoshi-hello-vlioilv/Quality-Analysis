@@ -11,6 +11,7 @@
 """
 import json
 import os
+import re
 import sqlite3
 import time
 from datetime import date, datetime, timedelta
@@ -176,15 +177,20 @@ def build_filter_where(filters, today=None):
     for f in filters:
         col, op, value = qi(f["column"]), f["op"], f["value"]
         if op == "contains":
-            parts.append(f"CStr({col}) LIKE ?"); params.append(f"%{value}%")
+            parts.append(f"CStr({col}) LIKE ?")
+            params.append(f"%{value}%")
         elif op == "not_contains":
-            parts.append(f"(CStr({col}) NOT LIKE ? OR {col} IS NULL)"); params.append(f"%{value}%")
+            parts.append(f"(CStr({col}) NOT LIKE ? OR {col} IS NULL)")
+            params.append(f"%{value}%")
         elif op == "eq":
-            parts.append(f"CStr({col})=?"); params.append(value)
+            parts.append(f"CStr({col})=?")
+            params.append(value)
         elif op == "neq":
-            parts.append(f"(CStr({col})<>? OR {col} IS NULL)"); params.append(value)
+            parts.append(f"(CStr({col})<>? OR {col} IS NULL)")
+            params.append(value)
         elif op == "starts":
-            parts.append(f"CStr({col}) LIKE ?"); params.append(f"{value}%")
+            parts.append(f"CStr({col}) LIKE ?")
+            params.append(f"{value}%")
         elif op == "starts_any":
             vals = [x for x in (value.split(",") if value else []) if x][:60]
             if not vals:
@@ -193,13 +199,15 @@ def build_filter_where(filters, today=None):
                 parts.append("(" + " OR ".join(f"CStr({col}) LIKE ?" for _ in vals) + ")")
                 params += [f"{v}%" for v in vals]
         elif op == "ends":
-            parts.append(f"CStr({col}) LIKE ?"); params.append(f"%{value}")
+            parts.append(f"CStr({col}) LIKE ?")
+            params.append(f"%{value}")
         elif op == "empty":
             parts.append(f"({col} IS NULL OR CStr({col})='')")
         elif op == "not_empty":
             parts.append(f"({col} IS NOT NULL AND CStr({col})<>'')")
         elif op in RELATIVE_OPS:
-            parts.append(f"ToDate({col}) >= ?"); params.append(cutoff_date(op, value, today))
+            parts.append(f"ToDate({col}) >= ?")
+            params.append(cutoff_date(op, value, today))
         elif op in ("gt", "gte", "lt", "lte"):
             sign = {"gt": ">", "gte": ">=", "lt": "<", "lte": "<="}[op]
             parts.append(f"Val(CStr({col})) {sign} ?")
@@ -207,7 +215,20 @@ def build_filter_where(filters, today=None):
     return parts, params
 
 
+SORT_KEYS = ("date", "month", "year")      # 並べ替えの鍵の形（画面の書式に合わせる。round:N は小数 N 桁で丸めた数）
+
+
+def sort_key_kind(v):
+    """並べ替えの鍵の形（画面が列の書式から決める）。日付だけ・年月・年・丸めた数。分からなければ ''（そのままの値）。"""
+    k = str(v or "").strip().lower()
+    if k in SORT_KEYS:
+        return k
+    m = re.fullmatch(r"round:([0-9]{1,2})", k)
+    return f"round:{min(int(m.group(1)), 10)}" if m else ""
+
+
 def safe_sorts(text, cs):
+    """並べ替え → [(列, ASC|DESC, 鍵の形)]。実在する列だけ・同じ列は最初の1つ・最大4つ。"""
     try:
         items = json.loads(text) if isinstance(text, str) and text else (text or [])
     except ValueError:
@@ -219,17 +240,37 @@ def safe_sorts(text, cs):
         if not isinstance(it, dict):
             continue
         col = str(it.get("column") or "").strip()
-        if col not in cs or any(col == c for c, _ in out):
+        if col not in cs or any(col == c for c, _, _ in out):
             continue
-        out.append((col, "DESC" if str(it.get("dir") or "").lower() == "desc" else "ASC"))
+        out.append((col, "DESC" if str(it.get("dir") or "").lower() == "desc" else "ASC", sort_key_kind(it.get("key"))))
         if len(out) >= MAX_SORTS:
             break
     return out
 
 
-def order_key(col, lot=""):
-    """並べ替えに使う式（画面のまとめの見分けと同じ鍵）。ロット番号の列は大小を同じに見る（lot_key と同じ）。"""
-    return f"SortKey(UPPER(CStr({qi(col)})))" if col == lot else f"SortKey({qi(col)})"
+def order_key(col, lot="", key=""):
+    """並べ替えに使う式（「並び・まとめ」の見分けと同じ鍵。→ 式の並び）。
+    - ふだん: SortKey(列)（空欄は1つ・数に読める字は数・前後の空白を除く）。ロット番号の列は大小を同じに見る
+    - 画面がその列を日付だけ（date）・年月（month）・年（year）で見せているとき: ToDate(列) の頭。時刻が違っても同じ日は隣り合う。
+      日付と読めない値はその後ろで SortKey（読めた値には効かない＝下の段の並びを崩さない）
+    - 小数 N 桁で見せているとき（round:N）: 数は丸めた値、数でない値は SortKey"""
+    q = qi(col)
+    if key in SORT_KEYS:
+        head = {"date": f"ToDate({q})", "month": f"SUBSTR(ToDate({q}), 1, 7)", "year": f"SUBSTR(ToDate({q}), 1, 4)"}[key]
+        return [head, f"CASE WHEN ToDate({q}) IS NULL THEN SortKey({q}) END"]
+    if key.startswith("round:"):
+        n = int(key[6:])
+        return [f"CASE WHEN typeof(SortKey({q})) IN ('integer', 'real') THEN ROUND(SortKey({q}), {n}) ELSE SortKey({q}) END"]
+    return [f"SortKey(UPPER(CStr({q})))" if col == lot else f"SortKey({q})"]
+
+
+def order_sql(order_parts, lot):
+    """[(列, 向き[, 鍵の形])] → ORDER BY の後ろ（無ければ ''）。"""
+    out = []
+    for part in order_parts:
+        col, d, key = (tuple(part) + ("",))[:3]
+        out += [f"{x} {d}" for x in order_key(col, lot, key)]
+    return ",".join(out)
 
 
 def lot_key(col):
@@ -278,7 +319,7 @@ def grouped_rows(c, t, raw_cs, lot, where, params, order_parts, page, size):
 
 def grouped_sql(t, raw_cs, lot, where, order_parts, size, rid=None):
     """まとめた並びの SQL（デスクトップ版の Rust・desktop/src/lotlist.rs も同じ文を作る）。最後の ? はページ。"""
-    over = ("ORDER BY " + ",".join(f"{order_key(col, lot)} {d}" for col, d in order_parts)) if order_parts else ""
+    over = ("ORDER BY " + order_sql(order_parts, lot)) if order_parts else ""
     cols = ", ".join(qi(x) for x in raw_cs)
     steps = """
         k AS (SELECT *, CASE WHEN _tpa_k0 = '' THEN '#' || _tpa_rn ELSE _tpa_k0 END AS _tpa_k FROM b),
@@ -333,7 +374,7 @@ def query(path, *, table="", preferred_table="", page=1, page_size=PAGE_SIZE_DEF
         where = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
         lot = lot_column(cs)
         order_parts = safe_sorts(sorts, cs)
-        order = (" ORDER BY " + ",".join(f"{order_key(col, lot)} {d}" for col, d in order_parts)) if order_parts else ""
+        order = (" ORDER BY " + order_sql(order_parts, lot)) if order_parts else ""
         count = int(c.execute(f"SELECT COUNT(*) FROM {qi(t)}" + where, params).fetchone()[0])
         start = (page - 1) * size
         grouped = {}
@@ -350,6 +391,6 @@ def query(path, *, table="", preferred_table="", page=1, page_size=PAGE_SIZE_DEF
         "today": (today or date.today()).isoformat(), "dateHints": hints,
         "rows": [{col: _json_value(v) for col, v in zip(raw_cs, r)} for r in rows],
         "count": count, "page": page, "page_size": size, "range": [first, last], **grouped,
-        "filters_applied": len(fl), "sorts": [{"column": col, "dir": d.lower()} for col, d in order_parts],
+        "filters_applied": len(fl), "sorts": [{"column": col, "dir": d.lower(), **({"key": k} if k else {})} for col, d, k in order_parts],
         "timing": {"server": round((time.perf_counter() - t0) * 1000)},
     }

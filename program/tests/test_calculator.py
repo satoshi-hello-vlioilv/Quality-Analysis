@@ -126,7 +126,8 @@ class SoilPositionsNotEntered(unittest.TestCase):
         self.assertAlmostEqual(res["actual_transfer_distance_m"], 3)
 
     def test_default_tolerance_is_5(self):
-        i = inputs(); del i["tolerance_percent"]
+        i = inputs()
+        del i["tolerance_percent"]
         res = Calculator({}, MasterRepository(ROOT)).calculate(lot_l6183d0(), dict(i, soil_b_m=1614.54))
         self.assertTrue(next(p for p in res["processes"] if p["no"] == 6)["transfer_match"])   # 97.4 %
 

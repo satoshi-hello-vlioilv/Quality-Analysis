@@ -20,7 +20,8 @@ def make_db(path, lots):
     c = sqlite3.connect(path)
     c.execute("CREATE TABLE [仕掛] (ロット番号 TEXT, 登録日時 TEXT)")
     c.executemany("INSERT INTO [仕掛] VALUES (?, '2026/09/29')", [(x,) for x in lots])
-    c.commit(); c.close()
+    c.commit()
+    c.close()
 
 
 class Effective(unittest.TestCase):
@@ -67,9 +68,12 @@ class Effective(unittest.TestCase):
 class Api(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
-        self.share = self.tmp / "share"; self.share.mkdir()
-        self.a = self.tmp / "src" / "SIKALOTDEF.sqlite3"; make_db(self.a, ["A0001"])
-        self.b = self.tmp / "src" / "SIKADEF.sqlite3"; make_db(self.b, ["B0001", "B0002"])
+        self.share = self.tmp / "share"
+        self.share.mkdir()
+        self.a = self.tmp / "src" / "SIKALOTDEF.sqlite3"
+        make_db(self.a, ["A0001"])
+        self.b = self.tmp / "src" / "SIKADEF.sqlite3"
+        make_db(self.b, ["B0001", "B0002"])
         (self.tmp / "app" / "data").mkdir(parents=True)
         for n in ("equipment_master", "roll_master", "path_settings"):
             shutil.copy(ROOT / "data" / f"{n}.json", self.tmp / "app" / "data" / f"{n}.json")
@@ -154,10 +158,13 @@ class Api(unittest.TestCase):
         self.assertTrue(ok["ok"], ok)
         self.assertIn("2行", ok["message"])
         miss = c.post("/api/settings/check", json={"key": "lot_list.source", "value": str(self.tmp / "無い.sqlite3")}).get_json()
-        self.assertFalse(miss["ok"]); self.assertIn("届きません", miss["message"])
-        junk = self.tmp / "junk.sqlite3"; junk.write_bytes(b"not sqlite" * 50)
+        self.assertFalse(miss["ok"])
+        self.assertIn("届きません", miss["message"])
+        junk = self.tmp / "junk.sqlite3"
+        junk.write_bytes(b"not sqlite" * 50)
         bad = c.post("/api/settings/check", json={"key": "lot_list.source", "value": str(junk)}).get_json()
-        self.assertFalse(bad["ok"]); self.assertIn("開けません", bad["message"])
+        self.assertFalse(bad["ok"])
+        self.assertIn("開けません", bad["message"])
         url = c.post("/api/settings/check", json={"key": "lotdsp_import.url", "value": "ftp://x"}).get_json()
         self.assertFalse(url["ok"])
 
@@ -169,7 +176,8 @@ class Api(unittest.TestCase):
         for name in ("appsettings.json", "appsettings.example.json"):
             shipped = json.loads((ROOT / "config" / name).read_text(encoding="utf-8"))["update"]["source"]
             self.assertTrue(shipped.endswith("\\90_アプリ開発\\90_Releases"), f"{name}: {shipped}")
-        drop = self.tmp / "更新"; drop.mkdir()
+        drop = self.tmp / "更新"
+        drop.mkdir()
         r = a.put("/api/settings/update.source", json={"value": f'"{drop}"', "base_rev": 0})
         self.assertEqual(r.status_code, 200, r.get_json())
         got = b.get("/api/update/settings").get_json()

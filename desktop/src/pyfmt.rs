@@ -5,6 +5,7 @@
 //!   - 小数は Python の repr（2.73→"2.73"・1e16→"1e+16"・1.0→"1.0"・1e-05→"1e-05"・-0.0→"-0.0"）
 //!   - バイナリは Python の bytes の repr（b'\x00\x01'）
 //!   - 数字は Unicode の 10 進数字（全角の「１２」も 12）、空白は Python の isspace（U+001C〜001F・全角の空白も）
+//!
 //! 突き合わせは desktop/tests/lotlist_parity.rs（Python の答えと 42 通りで比べる）。
 
 /// Python の str.isspace()（正規表現の \s と同じ）に当たる文字の範囲（Python 3.11.15 の unicodedata から作った）。
@@ -408,7 +409,7 @@ fn compact_date(cs: &[char]) -> Option<(u32, u32, u32)> {
 }
 
 fn iso(y: u32, m: u32, d: u32) -> Option<String> {
-    let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    let leap = (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400);
     let days = [31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
     ((1..=9999).contains(&y) && (1..=12).contains(&m) && d >= 1 && d <= days[(m - 1) as usize]).then(|| format!("{y:04}-{m:02}-{d:02}"))
 }
@@ -512,7 +513,7 @@ mod tests {
         assert_eq!(py_int("1_0"), Ok(10));
         assert_eq!(py_int("３"), Ok(3));
         assert_eq!(py_int("abc"), Err("invalid literal for int() with base 10: 'abc'".into()));
-        assert_eq!(py_int("2.0").is_err(), true);
+        assert!(py_int("2.0").is_err());
         assert_eq!(py_float(" 1e3 "), Ok(1000.0));
         assert_eq!(py_float(".5"), Ok(0.5));
         assert_eq!(py_float("5."), Ok(5.0));

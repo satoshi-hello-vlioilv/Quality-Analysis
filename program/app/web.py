@@ -23,11 +23,9 @@ import dataclasses
 import decimal
 import email.utils
 import hashlib
-import html
 import json
 import logging
 import mimetypes
-import os
 import re
 import uuid
 from datetime import date, datetime, timezone

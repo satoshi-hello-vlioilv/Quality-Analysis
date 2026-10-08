@@ -133,7 +133,7 @@ impl Scan {
                 out.push(r);
             }
         }
-        out.sort_by(|a, b| parse_version(&b.version).cmp(&parse_version(&a.version)));
+        out.sort_by_key(|r| std::cmp::Reverse(parse_version(&r.version)));
         out
     }
 

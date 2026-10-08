@@ -125,8 +125,42 @@
   /* サーバーへ渡す並べ替え: 段の列（上から）→ 見出しで決めた並べ替え（段の列は除く）。合わせて最大4つ */
   function effectiveSorts() {
     const set = new Set(levels().map((l) => l.column));
-    return sortingLevels().map(({ column, dir }) => ({ column, dir }))
+    return sortingLevels().map(({ column, dir }) => { const key = levelKeyKind(column); return key ? { column, dir, key } : { column, dir }; })
       .concat(S.sorts.filter((s) => !set.has(s.column))).slice(0, MAX_SORTS);
+  }
+  /* 段は「見えている値」でまとめる（Excel のピボットと同じ）。列の書式が値を丸めて見せるときは、サーバーにも同じ丸め方で並べさせる
+     （鍵の形: 日付だけ date・年月 month・年 year・小数 N 桁 round:N。lot_list.order_key）。時刻を見せる書式・書式なしは元の値のまま */
+  function levelKeyKind(c) {
+    const f = (window.LotListColumns.get(layoutTarget()).formats || {})[c];
+    if (!f || !f.kind) return "";
+    if (f.kind === "number") return f.decimals === "" || f.decimals == null ? "" : `round:${Math.max(0, Math.min(10, +f.decimals || 0))}`;
+    if (f.kind !== "datetime") return "";
+    const tokens = String(f.pattern || "yyyy/MM/dd").replace(/'[^']*'/g, "");
+    if (/[Hhms]|tt/.test(tokens)) return "";
+    return /d/.test(tokens) ? "date" : /M/.test(tokens) ? "month" : /y/.test(tokens) ? "year" : "";
+  }
+  /* 段の値の見分け: 見えている字（書式・読み替えの後）。ロット番号は大小・前後の空白を同じに。空欄は1つ */
+  function levelKey(r, c) {
+    if (c === S.lotColumn) return sortKey(lotKey(r));
+    return String(window.LotListColumns.cell(layoutTarget(), c, r).text ?? "").trim();
+  }
+  /* 受け取ったページの行を、段の見える値が同じ行どうし隣り合うように並べ直す（それぞれ最初に出た順・中の順は保つ）。
+     サーバーは見せ方に合わせて並べるので、ふつうは並びは変わらない。読み替え（ルール）で字を変えている列など、
+     サーバーが同じ鍵で並べられない列でも、ページの中では必ず1つのまとまりにする */
+  function clusterRows(rows) {
+    const lv = levels().map((l) => l.column);
+    if (!lv.length || rows.length < 3) return rows;
+    const walk = (list, d) => {
+      if (d >= lv.length || list.length < 3) return list;
+      const groups = new Map();
+      list.forEach((r, i) => {
+        const v = lv[d] === S.lotColumn && !sortKey(lotKey(r)) ? `\u0000#${i}` : levelKey(r, lv[d]);   // ロット番号が空の行はまとめない
+        if (!groups.has(v)) groups.set(v, []);
+        groups.get(v).push(r);
+      });
+      return [...groups.values()].flatMap((g) => walk(g, d + 1));
+    };
+    return walk(rows, 0);
   }
   /* いちばん上の段がロット番号なら、サーバーがロットを1か所に集め、ページの境目で切らない。
      深い段のロット番号は、上の段の並べ替えのあとに並べ替えるだけで続く（同じ上の段の中で集まる） */
@@ -211,6 +245,7 @@
       S.source = d.source || S.source;
       if (!r.ok) throw new Error(d.error || "ロット一覧を読めませんでした");
       S.table = d.table; S.tables = d.tables || []; S.columns = d.columns || []; S.rows = d.rows || [];
+      S.lotColumn = d.lotColumn || ""; S.rows = clusterRows(S.rows);
       S.count = d.count || 0; S.lotColumn = d.lotColumn || ""; S.error = ""; S.dateColumns = d.dateColumns || []; S.dateHints = d.dateHints || []; S.today = d.today || "";
       // 並べ替えはサーバーが確かめた形（実在する列だけ）。まとめているときは段の列を除いた、見出しで決めた分だけを持つ
       if (grouped()) { const have = new Set((d.columns || [])); S.sorts = S.sorts.filter((x) => have.has(x.column)); }
@@ -954,7 +989,10 @@
     if (!m.hidden) { closeViewMenu(); return; }
     renderViewMenu(); m.hidden = false; b.setAttribute("aria-expanded", "true");
     TPA.placeBelow(m, b, "right");
-    viewOff = TPA.dismissable(m, closeViewMenu, { keep: b, event: "mousedown" });   // つまみ・選択欄を触るので mousedown で見る
+    const off = TPA.dismissable(m, closeViewMenu, { keep: b, event: "mousedown" });   // つまみ・選択欄を触るので mousedown で見る
+    const fit = () => TPA.placeBelow(m, b, "right");                                    // 窓の大きさを変えたら、画面の下端に収め直す
+    addEventListener("resize", fit);
+    viewOff = () => { off(); removeEventListener("resize", fit); };
     requestAnimationFrame(() => $("#llGap").focus());
   }
 
@@ -1001,7 +1039,7 @@
      まとまりはこのページの中だけで数える（ロット番号の段のほかは、ページの境目で続くことがある）。 */
   function arrangedBody(cols, aligns, cellsOf) {
     const t = layoutTarget(), LC = window.LotListColumns, A = arrange(), lv = levels(), n = lv.length, rows = S.rows, shut = collapsed();
-    const keyOf = (r, c, i) => { const v = c === S.lotColumn ? sortKey(lotKey(r)) : sortKey(r[c]); return c === S.lotColumn && !v ? `\u0000#${i}` : v; };   // ロット番号が空の行はまとめない
+    const keyOf = (r, c, i) => { const v = levelKey(r, c); return c === S.lotColumn && !v ? `\u0000#${i}` : v; };   // 見えている値。ロット番号が空の行はまとめない
     const paths = rows.map((r, i) => lv.map((l) => keyOf(r, l.column, i)));
     const cells = rows.map(cellsOf);
     const same = (i, j, d) => { for (let k = 0; k <= d; k++) if (paths[i][k] !== paths[j][k]) return false; return true; };

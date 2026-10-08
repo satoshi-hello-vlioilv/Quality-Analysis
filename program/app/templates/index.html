@@ -41,6 +41,8 @@
     <!-- だれが・どの権限で使っているか（押すとログインID・PC名・マスタ編集） -->
     <button type="button" id="meChip" class="pill me-chip" aria-haspopup="dialog" title="ログインID・PC名・権限">確認中</button>
     <button id="masterBtn" class="btn-ghost on-dark" title="設備マスタ・ロールマスタの追加/修正/削除">マスタ管理</button>
+    <!-- アプリのこと（ショートカット・更新履歴）。ショートカットが欠けていれば点で知らせる（断った人・消した人もここから作れる） -->
+    <button type="button" id="appBtn" class="btn-ghost on-dark app-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="appMenu" title="ショートカット・更新履歴">アプリ<i id="appDot" class="app-dot" hidden></i> ▾</button>
     <button id="quitBtn" class="quit" title="アプリを終了してタブを閉じます">終了</button>
   </div>
 </header>
@@ -49,6 +51,7 @@
 <div id="revokedBar" class="revoked-bar hidden" role="alert"></div>
 <!-- 自分の権限（見出しの札を押すと出る） -->
 <div id="mePop" class="me-pop hidden" role="dialog" aria-label="ログインと権限"></div>
+<div id="appMenu" class="app-menu hidden" role="menu" aria-label="アプリ"></div>
 <!-- この PC に入れる（BOX・共有から開いたとき。デスクトップ版の desktop/src/install.rs） -->
 <div id="shortcutModal" class="master-form-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="scTitle">
   <div class="master-form-card sc-card">

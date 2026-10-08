@@ -123,6 +123,14 @@ CASES = [
     {"sorts": _s(("ロット番号", "desc"), ("不良名", "asc"))},
     {"group": True, "sorts": _s(("ロット番号", "asc"), ("備考", "asc"), ("数量", "desc"))},
     {"group": True, "sorts": _s(("不良名", "asc"), ("ロット番号", "desc")), "page": 2, "page_size": 120},
+    # 見せ方に合わせた鍵（版 3.13.0）: 日付だけ・年月・年・丸めた数。分からない鍵はそのままの値
+    {"sorts": json.dumps([{"column": "発生日", "dir": "asc", "key": "date"}, {"column": "設備", "dir": "asc"}], ensure_ascii=False)},
+    {"sorts": json.dumps([{"column": "発生日", "dir": "desc", "key": "month"}, {"column": "不良名", "dir": "asc"},
+                          {"column": "入力日時", "dir": "asc", "key": "YEAR"}], ensure_ascii=False)},
+    {"sorts": json.dumps([{"column": "比重", "dir": "asc", "key": "round:0"}, {"column": "長さ", "dir": "desc", "key": "Round:12"},
+                          {"column": "重量", "dir": "asc", "key": "round:x"}, {"column": "板厚", "dir": "asc", "key": 3}], ensure_ascii=False)},
+    {"group": True, "page": 2, "page_size": 90,
+     "sorts": json.dumps([{"column": "ロット番号", "dir": "asc"}, {"column": "検査日", "dir": "desc", "key": "date"}], ensure_ascii=False)},
 ]
 
 

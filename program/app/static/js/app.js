@@ -364,35 +364,85 @@ const desktopPost = async (url) => {   // 窓（/__desktop/*）へ POST し、�
   if (!r.ok) throw new Error(d.error || "できませんでした");
   return d;
 };
-async function loadInstall() {
+/* 窓に、この PC のアプリとショートカットの様子を尋ね直す（ショートカットはアプリの外で消されることがあるので、メニューを開くたびに）。
+   窓の外（開発で python -m app から見るとき）は null */
+async function refreshInstall() {
   try {
     const r = await fetch("/__desktop/install", { cache: "no-store" });
-    if (!r.ok) return;                       // 窓の外（開発で python -m app から見るとき）
+    if (!r.ok) return null;
     state.install = await r.json();
-  } catch (_) { return; }
-  const sc = state.install.shortcut || {};
+  } catch (_) { return null; }
+  paintAppDot();
+  return state.install;
+}
+/* 置き場ごとの有無（デスクトップ・スタート）。links は正しいショートカット（この PC の app を指す）だけ */
+function shortcutPlaces(i) {
+  const sc = (i && i.shortcut) || {}, norm = (x) => String(x || "").replace(/\//g, "\\").toLowerCase();
+  const name = (pl) => (/desktop|デスクトップ/i.test(pl) ? "デスクトップ" : /programs|start menu|スタート|applications/i.test(pl) ? "スタート" : String(pl).split(/[\\/]/).filter(Boolean).pop());
+  return (sc.places || []).map((pl) => ({ place: pl, name: name(pl), ok: (sc.links || []).some((l) => norm(l).startsWith(norm(pl).replace(/\\$/, "") + "\\")) }));
+}
+const shortcutMissing = (i) => !!(i && i.installed) && shortcutPlaces(i).some((x) => !x.ok);
+/* 欠けていれば「アプリ」に点（「今後たずねない」にした人には点を出さない。メニューの中にはいつも出す） */
+function paintAppDot() {
+  const i = state.install, on = shortcutMissing(i) && !((i.shortcut || {}).declined);
+  $("#appDot").hidden = !on;
+  $("#appBtn").title = on ? "ショートカットが欠けています（押して「ショートカットを作る」）" : "ショートカット・更新履歴";
+}
+async function loadInstall() {
+  const i = await refreshInstall();
+  if (!i) return;
+  const sc = i.shortcut || {};
   if (!sc.ask) return;
   if (TPA.local.get(LEGACY_NEVER, false)) {
     try { await desktopPost("/__desktop/shortcut/decline"); TPA.local.remove(LEGACY_NEVER); sc.ask = false; sc.declined = true; } catch (_) { /* 次の起動で */ }
+    paintAppDot();
     return;
   }
-  openShortcut();
+  openShortcut({ asked: true });
 }
-function openShortcut() {
+/* ショートカットの窓。asked=true は起動のときに尋ねる形（今後たずねない・今回は作らない）、false は自分で開いた形（閉じる） */
+function openShortcut({ asked = false } = {}) {
   const i = state.install;
   if (!i) return;
-  const sc = i.shortcut || {};
+  const places = shortcutPlaces(i), all = places.length && places.every((x) => x.ok), some = places.some((x) => x.ok);
+  $("#scTitle").textContent = asked ? "ショートカットを作りますか" : "ショートカット";
   $("#scBody").innerHTML = `<div>デスクトップとスタートに「${esc(i.name)}」を作ると、次からはそこから開けます（スタートの検索で「${esc(i.name)}」と打つと出ます）。</div>
+    <div class="sc-places" aria-label="いまのショートカット">${places.map((x) => `<span>${esc(x.name)} <b class="${x.ok ? "ok" : "ng"}">${x.ok ? "✓ あります" : "✕ ありません"}</b></span>`).join("") || "（作る場所が分かりません）"}</div>
     <ul><li><b>この PC の物が開きます</b>。共有・BOX につながっていなくても開けます（起動に要る物はもうこの PC へ写してあります）。</li>
-      <li>新しい版は、これまでどおり自動で入れ替わります（ショートカットはそのまま使えます）。</li></ul>
-    <div class="sc-where">ショートカットが開く物: <code>${esc(i.appDir)}</code>（作業フォルダも同じ）<br>作る場所: ${(sc.places || []).map((p) => `<code>${esc(p)}</code>`).join("<br>") || "（場所が分かりません）"}</div>
+      <li>新しい版は、これまでどおり自動で入れ替わります（ショートカットはそのまま使えます）。</li>
+      <li>あとからでも、右上の「アプリ」→「ショートカットを作る」から作れます（消してしまったとき・断ったときも）。</li></ul>
+    <div class="sc-where">ショートカットが開く物: <code>${esc(i.appDir)}</code>（作業フォルダも同じ）<br>作る場所: ${places.map((x) => `<code>${esc(x.place)}</code>`).join("<br>") || "（場所が分かりません）"}</div>
     <div class="sc-msg hidden" id="scMsg" aria-live="polite"></div>`;
   const go = $("#scGo");
-  go.disabled = false; go.textContent = "作る"; go.onclick = makeShortcut;
-  $("#scNever").hidden = $("#scLater").hidden = false;
+  go.disabled = !i.installed; go.textContent = all ? "作り直す" : some ? "無い所に作る" : "作る"; go.onclick = makeShortcut;
+  go.title = i.installed ? "" : "この PC のアプリ（app）がまだありません。共有・BOX の exe から一度開いてください";
+  $("#scNever").hidden = !asked;
+  $("#scLater").hidden = false; $("#scLater").textContent = asked ? "今回は作らない" : "閉じる";
   $("#shortcutModal").classList.remove("hidden");
   go.focus();
 }
+/* 右上の「アプリ」メニュー */
+let appMenuOff = null;
+function closeAppMenu() { $("#appMenu").classList.add("hidden"); $("#appBtn").setAttribute("aria-expanded", "false"); if (appMenuOff) appMenuOff(); appMenuOff = null; }
+async function openAppMenu() {
+  const m = $("#appMenu");
+  const paint = (i) => {
+    const places = shortcutPlaces(i), missing = shortcutMissing(i);
+    const sub = !i ? "デスクトップ版の窓で使えます" : !i.installed ? "この PC のアプリがまだありません（共有・BOX の exe から一度開くと作れます）"
+      : places.map((x) => `${x.name} ${x.ok ? "✓" : "✕"}`).join("・") || "作る場所が分かりません";
+    m.innerHTML = `<button type="button" role="menuitem" id="amShortcut"${missing ? ' class="is-warn"' : ""}${i && i.installed ? "" : " disabled"}><b>ショートカットを作る</b><small>${esc(sub)}</small></button>
+      <button type="button" role="menuitem" id="amChangelog"><b>更新履歴</b><small>いまの版 ${esc($("#verBadge").textContent.replace(/^VER/, ""))}</small></button>`;
+    $("#amShortcut").onclick = () => { closeAppMenu(); openShortcut(); };
+    $("#amChangelog").onclick = () => { closeAppMenu(); openChangelog(); };
+  };
+  paint(state.install);
+  m.classList.remove("hidden"); $("#appBtn").setAttribute("aria-expanded", "true");
+  appMenuOff = TPA.dismissable(m, closeAppMenu, { keep: $("#appBtn") });
+  (m.querySelector("button:not(:disabled)") || m).focus();
+  const fresh = await refreshInstall();                 // 開いたあいだに消された・作られたものを映す
+  if (fresh && !m.classList.contains("hidden")) paint(fresh);
+}
+$("#appBtn").onclick = () => ($("#appMenu").classList.contains("hidden") ? openAppMenu() : closeAppMenu());
 const closeShortcut = () => $("#shortcutModal").classList.add("hidden");
 async function makeShortcut() {
   const go = $("#scGo"), msg = $("#scMsg");
@@ -404,6 +454,7 @@ async function makeShortcut() {
     say(bad.length ? "ng" : "ok", `ショートカットを作りました: ${(d.made || []).map((p) => `<code>${esc(p)}</code>`).join("<br>") || "なし"}`
       + (bad.length ? `<br>作れなかったもの: ${bad.map(esc).join("<br>")}` : ""));
     state.install.shortcut = { ...state.install.shortcut, ask: false, declined: false, links: d.made || [] };
+    await refreshInstall();
     $("#scNever").hidden = $("#scLater").hidden = true;
     go.disabled = false; go.textContent = "閉じる"; go.onclick = closeShortcut; go.focus();
   } catch (e) {
@@ -415,7 +466,7 @@ $("#scLater").onclick = closeShortcut;
 $("#scClose").onclick = closeShortcut;
 $("#scNever").onclick = async () => {
   try { await desktopPost("/__desktop/shortcut/decline"); state.install.shortcut.declined = true; } catch (e) { fail(e.message); }
-  closeShortcut();
+  paintAppDot(); closeShortcut();
 };
 TPA.layer($("#shortcutModal"), closeShortcut);
 

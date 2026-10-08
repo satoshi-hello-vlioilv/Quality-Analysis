@@ -101,7 +101,8 @@ class Env(unittest.TestCase):
         self.who = {"login": "u1", "pc": "PC-1"}
         self.p1 = mock.patch.object(identity, "current_login_id", lambda: self.who["login"])
         self.p2 = mock.patch.object(identity, "resolve_pc_name", lambda override="", force=False: {"name": self.who["pc"], "source": "test", "tried": []})
-        self.p1.start(); self.p2.start()
+        self.p1.start()
+        self.p2.start()
         store = MasterStore(self.tmp / "app", local_root=self.tmp / "local", settings={"dir": str(self.tmp / "share"), "refresh_seconds": 0})
         self.app = create_app({"TESTING": True, "MASTER_STORE": store})
         self.c = self.app.test_client()
@@ -109,7 +110,8 @@ class Env(unittest.TestCase):
         r._REVOKE_CACHE.update(at=0.0, key="")
 
     def tearDown(self):
-        self.p1.stop(); self.p2.stop()
+        self.p1.stop()
+        self.p2.stop()
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def as_(self, login, pc="PC-1"):
@@ -167,7 +169,8 @@ class Api(Env):
         self.assertEqual(self.add_perm(ログインID="op", 権限区分="設備作業者", マスタ編集="非表示").status_code, 201)
         self.as_("op")
         d = self.c.get("/api/access/me").get_json()
-        self.assertFalse(d["canOpenMaster"]); self.assertFalse(d["canViewPresence"])
+        self.assertFalse(d["canOpenMaster"])
+        self.assertFalse(d["canViewPresence"])
         self.assertEqual(self.c.get("/api/presence").status_code, 403)
 
 
@@ -188,7 +191,8 @@ class Presence(Env):
         self.assertTrue((self.tmp / "share" / "presence_tpa").exists(), "共有フォルダの下に置く（WaveLog の presence と分ける）")
         fl = self.c.get("/api/presence").get_json()["fleet"]
         me = next(x for x in fl["items"] if x["login"] == "u1")
-        self.assertTrue(me["online"]); self.assertEqual(me["version"], APP_VERSION)
+        self.assertTrue(me["online"])
+        self.assertEqual(me["version"], APP_VERSION)
 
     def test_latest_version_and_outdated_notice(self):
         self.beat()
@@ -198,7 +202,8 @@ class Presence(Env):
         self.assertEqual((n["latestVersion"], n["outdated"]), ("9.9.9", True), "ほかの人がもっと新しい版を使っている → 古い")
         self.assertFalse(presence.version_notice("開発者")["outdated"], "開発者には古いと言わない")
         fl = self.c.get("/api/presence").get_json()["fleet"]
-        self.assertEqual(fl["latest"], "9.9.9"); self.assertTrue(next(x for x in fl["items"] if x["login"] == "u1")["outdated"])
+        self.assertEqual(fl["latest"], "9.9.9")
+        self.assertTrue(next(x for x in fl["items"] if x["login"] == "u1")["outdated"])
 
     def test_heartbeat_tells_outdated_through_the_background_thread(self):
         """心拍 → 裏の糸で最新版を数え直す → 次の心拍の答えに「古い」（裏の糸で current_app を使わない）。"""
@@ -215,13 +220,15 @@ class Presence(Env):
 
     def test_developer_versions_do_not_count(self):
         self.write_history("dev", "PC-D", "9.9.9")
-        roles = lambda pairs: {p: ("開発者" if p[0] == "dev" else "一般ユーザー") for p in pairs}
+        def roles(pairs):
+            return {p: ("開発者" if p[0] == "dev" else "一般ユーザー") for p in pairs}
         self.beat()
         self.assertEqual(presence.latest_version(roles), APP_VERSION, "開発者の試しの版は最新版に数えない")
 
     def test_disconnect_blocks_writes_then_allow(self):
         self.seed("boss", "メンテナンス者")
-        self.as_("u1"); self.beat()
+        self.as_("u1")
+        self.beat()
         self.as_("boss")
         key = presence.terminal_key("u1", "PC-1")
         self.assertEqual(self.c.post("/api/presence/disconnect", json={"key": key, "reason": "版を上げてください"}).status_code, 200)
@@ -239,13 +246,15 @@ class Presence(Env):
         self.beat()
         key = presence.terminal_key("u1", "PC-1")
         self.assertEqual(self.c.post("/api/presence/disconnect", json={"key": key}).status_code, 400, "自分は切断できない")
-        self.as_("u2", "PC-2"); self.beat()
+        self.as_("u2", "PC-2")
+        self.beat()
         self.as_("u1")
         self.assertEqual(self.c.post("/api/presence/disconnect", json={"key": presence.terminal_key("u2", "PC-2")}).status_code, 403)
 
     def test_forget_refuses_online_and_leave_removes_presence(self):
         self.seed("boss", "開発者")
-        self.as_("u1"); self.beat()
+        self.as_("u1")
+        self.beat()
         self.as_("boss")
         key = presence.terminal_key("u1", "PC-1")
         self.assertEqual(self.c.post("/api/presence/forget", json={"key": key}).status_code, 409, "使っている PC の記録は消せない")
