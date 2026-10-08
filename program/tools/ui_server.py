@@ -13,6 +13,7 @@
 リポジトリ（program/data など）を汚さない。
 """
 import os
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -42,7 +43,9 @@ def main():
     as_role(sys.argv[2] if len(sys.argv) > 2 else "開発者")
     share = WORK / "share.sqlite3"
     lotlist_fixture.make(str(share), 1500)
-    app = create_app({"MASTER_STORE": MasterStore(PROGRAM, local_root=WORK / "masters", settings={}),
+    # 手元のみのマスタは base/data に書く。同梱のマスタを作業フォルダへ写して渡す（画面で直してもリポジトリを汚さない）
+    shutil.copytree(PROGRAM / "data", WORK / "base" / "data", ignore=shutil.ignore_patterns("*.sqlite3", "cache", "local"))
+    app = create_app({"MASTER_STORE": MasterStore(WORK / "base", local_root=WORK / "masters", settings={}),
                       "LOT_MIRROR": DbMirror("lot_list", share, WORK / "cache")})
     serve_http(app, port=port)
 

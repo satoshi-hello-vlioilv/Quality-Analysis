@@ -237,7 +237,8 @@
       </div>
       <button id="masterCloseBtn" class="icon-btn" aria-label="閉じる" title="閉じる">×</button>
     </div>
-    <div class="master-tabs" id="masterTabs" role="tablist"></div>
+    <!-- 左: 区分（データ・つなぎ先・管理）ごとのナビ。どこに何があるかがいつも同じ所に見える -->
+    <div class="master-tabs" id="masterTabs" role="tablist" aria-orientation="vertical"></div>
     <div class="master-toolbar">
       <input id="masterSearch" type="search" placeholder="検索" aria-label="マスタの中を検索">
       <span id="masterCount" class="master-count"></span>
@@ -252,27 +253,23 @@
       </table>
       <div class="master-empty hidden" id="masterEmpty">該当するデータがありません。検索条件を変更するか、「新規追加」から登録してください。</div>
     </div>
+    <!-- 右: 選んだ行の詳細。押した行をそのまま直す（別の小窓を開かない）。＋ 新規追加もここに空の欄を出す -->
+    <aside class="master-detail" id="masterDetail" aria-label="選んだ行の詳細">
+      <div class="master-form-head"><h3 id="masterFormTitle">追加</h3></div>
+      <!-- 保存の途中経過・競合（ほかの PC が先に変えた／消した）と、選べる次の手 -->
+      <div id="masterFormNotice" class="master-notice hidden" aria-live="polite"></div>
+      <div class="master-form-body" id="masterFormBody"></div>
+      <p class="master-detail-empty hidden" id="masterDetailEmpty">左の一覧で行を押すと、ここで中身を見て直せます。新しく足すときは「＋ 新規追加」。</p>
+      <div class="master-form-foot" id="masterFormFoot">
+        <button id="masterFormDelBtn" class="btn-ghost danger-ghost" title="この行を削除します（確かめてから消します）">削除</button>
+        <span id="masterFormError" class="form-error hidden"></span>
+        <div class="spacer"></div>
+        <button id="masterFormCancelBtn" class="btn-ghost" title="直した所を、保存してある内容に戻します">元に戻す</button>
+        <button id="masterFormSaveBtn" class="btn-primary">保存</button>
+      </div>
+    </aside>
     <!-- 参照先（読みに行く場所）: 項目ごとのカード。表ではなく「いまの値・既定・確かめる・保存」を並べる -->
     <div class="master-settings hidden" id="masterSettings" aria-live="polite"></div>
-  </div>
-</div>
-
-<!-- 追加・編集フォーム -->
-<div id="masterFormOverlay" class="master-form-overlay hidden">
-  <div class="master-form-card">
-    <div class="master-form-head">
-      <h3 id="masterFormTitle">追加</h3>
-      <button id="masterFormCloseBtn" class="icon-btn" aria-label="閉じる">×</button>
-    </div>
-    <!-- 保存の途中経過・競合（ほかの PC が先に変えた／消した）と、選べる次の手 -->
-    <div id="masterFormNotice" class="master-notice hidden" aria-live="polite"></div>
-    <div class="master-form-body" id="masterFormBody"></div>
-    <div class="master-form-foot">
-      <span id="masterFormError" class="form-error hidden"></span>
-      <div class="spacer"></div>
-      <button id="masterFormCancelBtn" class="btn-ghost">キャンセル</button>
-      <button id="masterFormSaveBtn" class="btn-primary">保存する</button>
-    </div>
   </div>
 </div>
 

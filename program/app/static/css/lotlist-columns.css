@@ -141,20 +141,23 @@ td.cell-warn{background:#fff5e0!important}
 .ll-colpanel .lc-chip.is-on{background:var(--ll-pale);border-color:var(--h-xfer);color:var(--ll-teal-dark);font-weight:700}
 .lc-q{font-size:12px;color:var(--muted)}
 .ll-colpanel .lc-q button{height:22px;font-size:11.5px;margin-left:4px}
-.lc-listhead{display:grid;grid-template-columns:28px minmax(0,1fr) minmax(0,.9fr);gap:6px;align-items:center;padding:5px 12px;background:#f3f6f8;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:11.5px;color:var(--muted);font-weight:700}
+.lc-listhead{display:grid;grid-template-columns:28px minmax(0,1fr) minmax(0,.75fr) minmax(0,.9fr);gap:6px;align-items:center;padding:5px 12px;background:#f3f6f8;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:11.5px;color:var(--muted);font-weight:700}
 .lc-list{list-style:none;margin:0;padding:0;overflow:auto;flex:1;position:relative}
-.lc-row{display:grid;grid-template-columns:22px 18px minmax(0,1fr) minmax(0,.9fr);gap:6px;align-items:center;padding:5px 12px;border-bottom:1px solid var(--line-soft);cursor:pointer;user-select:none}
+.lc-row{display:grid;grid-template-columns:22px 18px minmax(0,1fr) minmax(0,.75fr) minmax(0,.9fr);gap:6px;align-items:center;padding:5px 12px;border-bottom:1px solid var(--line-soft);cursor:pointer;user-select:none}
 .lc-row:hover{background:#f6fafb}
 .lc-row.is-sel{background:var(--ll-pale)}
 .lc-row.is-focus{box-shadow:inset 3px 0 0 var(--h-xfer)}
 .lc-row.is-hidden .lc-name{color:#98a4ae}
-.lc-grip{color:#9aa8b2;cursor:grab;text-align:center}
+.lc-grip{color:#66737e;cursor:grab;text-align:center}
 .lc-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
 .lc-name small{margin-left:6px;color:var(--muted);font-weight:400;font-size:11.5px}
 .lc-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px}
-.lc-dot.is-src{background:var(--h-input)}.lc-dot.is-calc{background:var(--ll-warn)}
-.lc-b{font-style:normal;display:inline-block;margin-left:4px;padding:0 4px;border-radius:4px;background:var(--surface-5);color:var(--h-meta);font-size:10.5px;font-weight:800}
-.lc-b.is-rule{background:#fff3d9;color:var(--warn-ink)}.lc-b.is-fx{background:#efe8fb;color:#5a3e91}
+.lc-dot.is-src{background:var(--h-input)}.lc-dot.is-calc{background:#7a5bc0}
+/* 変えた列の印: 名前の後ろのアンバーの点（種類の印＝名前の前の点とは、置き場と色で分ける）。何を変えたかは乗せると出る */
+.lc-chg{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:6px;vertical-align:1px;background:var(--accent);box-shadow:0 0 0 2px #fff3d6}
+/* 表示名: 付けた名前だけを出す。選んでいる列はその場で直せる欄 */
+.lc-inl{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+.ll-colpanel .lc-inl input{width:100%;height:26px}
 .lc-sample{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--h-meta);font-size:12.5px}
 .lc-sample s{color:#aab4bc}
 .lc-none{color:#aab4bc;font-style:normal}
@@ -167,8 +170,17 @@ td.cell-warn{background:#fff5e0!important}
 .lc-card > b{font-size:15px}
 .lc-card dl{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:6px 0 0;font-size:12.5px}
 .lc-card dt{color:var(--muted)}.lc-card dd{margin:0}
-.lc-step{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-bottom:10px;display:grid;gap:8px}
-.lc-step h4{margin:0;font-size:13.5px;display:flex;align-items:center;gap:6px}
+.lc-step{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:0 12px;margin-bottom:8px;display:grid;gap:8px}
+.lc-step.is-open{padding-bottom:12px;border-color:#b9c9d6}
+.lc-step:not(.is-open) > :not(h4){display:none}
+.lc-step h4{margin:0 -12px;padding:10px 12px;font-size:13.5px;display:flex;align-items:center;gap:6px;cursor:pointer;border-radius:9px;user-select:none}
+.lc-step h4:hover{background:var(--surface-2)}
+.lc-step h4:focus-visible{outline:2px solid var(--h-input);outline-offset:-2px}
+.lc-now{margin-left:auto;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:400;font-size:12px;color:var(--muted);
+  background:var(--surface-4);border-radius:999px;padding:1px 10px}
+.lc-now.is-set{background:var(--input-soft);color:var(--h-input);font-weight:700}
+.lc-chev{width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);margin:0 4px 0 6px;transition:transform .12s}
+.lc-step.is-open .lc-chev{transform:rotate(45deg)}
 .lc-step h4 i{font-style:normal;display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:var(--h-input);color:var(--on-fill);font-size:11px}
 .lc-step h4 small{font-weight:400;color:var(--muted)}
 .lc-step > label{display:grid;grid-template-columns:90px 1fr;align-items:center;gap:8px;color:var(--muted);font-weight:700}
@@ -177,7 +189,7 @@ td.cell-warn{background:#fff5e0!important}
 .lc-radio,.lc-check{display:inline-flex;align-items:center;gap:4px;cursor:pointer}
 .lc-field input[type=number]{width:90px}
 .lc-field .lc-hint{width:100%;padding-left:100px}
-.lc-fx textarea{width:100%}
+.lc-step[data-step="fx"] textarea{width:100%}
 .lc-fxstate{font-size:12px}.lc-fxstate.is-ok{color:var(--ok)}.lc-fxstate.is-ng{color:var(--danger);font-weight:700}
 .lc-fxtry{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:var(--muted)}
 .lc-fxtry code{background:var(--surface-4);border-radius:5px;padding:1px 6px;color:var(--ink)}
@@ -185,12 +197,17 @@ td.cell-warn{background:#fff5e0!important}
 .lc-help table{font-size:12px;border-collapse:collapse;margin-top:4px}
 .lc-help td{padding:2px 8px 2px 0;vertical-align:top}
 .ll-colpanel .lc-danger{justify-self:start;color:var(--danger);border-color:var(--danger-line)}
-.lc-result table{border-collapse:collapse;font-size:12.5px}
-.lc-result td,.lc-result th{padding:3px 8px;text-align:left}
-.lc-result th{color:var(--muted);font-weight:700}
-.lc-result small{color:var(--muted)}
-.lc-presets{display:flex;align-items:center;gap:8px;padding:8px 16px;border-top:1px solid var(--line);background:var(--surface);flex:0 0 auto;font-size:12.5px}
-.lc-presets label{display:flex;align-items:center;gap:6px;color:var(--muted);font-weight:700}
+.lc-step[data-step="result"] table{border-collapse:collapse;font-size:12.5px}
+.lc-step[data-step="result"] td,.lc-step[data-step="result"] th{padding:3px 8px;text-align:left}
+.lc-step[data-step="result"] th{color:var(--muted);font-weight:700}
+.lc-step[data-step="result"] small{color:var(--muted)}
+/* 保存した設定・書き出し: 下の帯の左に畳み、押すと上へ開く小窓（ふだんは使わない操作を主の操作から離す） */
+.lc-more{position:relative}
+.lc-presets{position:absolute;left:0;bottom:calc(100% + 6px);z-index:3;display:grid;gap:8px;min-width:340px;padding:12px;border:1px solid var(--pop-line);border-radius:10px;
+  background:var(--surface);box-shadow:0 14px 36px var(--pop-shadow);font-size:12.5px}
+.lc-presets label{display:grid;gap:4px;color:var(--muted);font-weight:700}
+.lc-presets-acts{display:flex;gap:6px}
+.ll-colpanel .lc-foot #lcSave{height:36px;padding:0 30px;font-size:14px}
 
 /* ---------- 読み替えルールの窓（左＝試した結果・右＝決めること） ---------- */
 .lr-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(260px,.42fr) 1fr}

@@ -24,7 +24,7 @@ const fail = (message) => emit("tpa:error", message);
 const MASTER_DEFS = {
   equipment: {
     name: "equipment_master",
-    label: "設備マスタ",
+    label: "設備マスタ", group: "データ",
     api: "/api/masters/equipment",
     idField: "設備名",
     searchPlaceholder: "設備名・同一工程の名前で検索",
@@ -51,7 +51,7 @@ const MASTER_DEFS = {
   },
   rolls: {
     name: "roll_master",
-    label: "ロールマスタ",
+    label: "ロールマスタ", group: "データ",
     api: "/api/masters/rolls",
     idField: "ロール名",
     searchPlaceholder: "設備・ロール名・基準番号・材質で検索",
@@ -86,10 +86,10 @@ const MASTER_DEFS = {
 };
 
 /* 参照先（読みに行く場所）。表ではなくカードで出す特別なタブ（custom）。中身は /api/settings の items */
-MASTER_DEFS.paths = { name: "path_settings", label: "参照先", api: "/api/settings", custom: true, admin: true };
+MASTER_DEFS.paths = { name: "path_settings", label: "参照先", group: "つなぎ先", api: "/api/settings", custom: true, admin: true };
 /* アクセス権限（管理のマスタ）。判定はサーバー（services/access.py）の1箇所。画面は選択欄と印を出すだけ。 */
 MASTER_DEFS.access = {
-  name: "access_permissions", label: "アクセス権限", api: "/api/masters/access", idField: "ログインID", admin: true,
+  name: "access_permissions", label: "アクセス権限", group: "管理", api: "/api/masters/access", idField: "ログインID", admin: true,
   parse: (d) => { mstate.meta.access = d; return d.items || []; },
   searchPlaceholder: "ログインID・PC名・権限区分で検索",
   listColumns: [
@@ -115,11 +115,11 @@ MASTER_DEFS.access = {
   ],
 };
 /* 利用状況（だれが・どの PC で・どの版を）。見られる区分だけにタブを出す。 */
-MASTER_DEFS.presence = { name: "presence", label: "利用状況", api: "/api/presence", custom: true, render: () => renderPresence(),
+MASTER_DEFS.presence = { name: "presence", label: "利用状況", group: "管理", api: "/api/presence", custom: true, render: () => renderPresence(),
   visible: (me) => !!me.canViewPresence };
 /* アプリの配布（版 3.4.0・WaveLog と同じ流れ）: ① 版を置く → ② 配る版を選ぶ → ③ 各 PC がそろう。
    答えるのは窓（desktop/src/distribute.rs）。置く・配るは開発者・メンテナンス者だけ（決めるのは services/access.py）。 */
-MASTER_DEFS.release = { name: "release", label: "アプリの配布", api: "/__desktop/release", custom: true, render: () => renderRelease() };
+MASTER_DEFS.release = { name: "release", label: "アプリの配布", group: "管理", api: "/__desktop/release", custom: true, render: () => renderRelease() };
 
 const mstate = {
   tab: "equipment",
@@ -129,7 +129,8 @@ const mstate = {
   loadedRev: { equipment: null, rolls: null, paths: null },   // 一覧を読んだときのマスタの版
   place: null,        // /api/masters/status の答え
   search: "",
-  editing: null,      // { tab, id, baseRev } | null(=新規)
+  editing: null,      // 右の詳細に出している行 { tab, id(追加なら null), baseRev, orig } | null(=何も出していない)
+  selId: null,        // 右に出す行（一覧を描き直しても同じ行を出す）。追加の前に選んでいた行は prevSel
   deleteTarget: null, // { tab, id, rev }
   pollTimer: null,
 };
@@ -182,6 +183,7 @@ function readOnlyWhy(tab) {
 const tabVisible = (k) => !MASTER_DEFS[k].visible || MASTER_DEFS[k].visible(mstate.me || {});
 async function openMaster() {
   $("#masterOverlay").classList.remove("hidden");
+  mstate.editing = null;   // 前に開いたときの詳細は、読み直した内容で出し直す
   try { mstate.me = await (await fetch("/api/access/me")).json(); } catch (_) { mstate.me = null; }
   if (!tabVisible(mstate.tab)) mstate.tab = "equipment";
   buildMasterTabs();
@@ -195,6 +197,7 @@ async function openMaster() {
   mstate.pollTimer = setInterval(refreshPlace, MASTER_POLL_MS);
 }
 function closeMaster() {
+  if (!leaveOk()) return;
   emit("tpa:masters-closed");   // 設備マスタ（検査計など）を直したかもしれない → 画面が引き直す
   $("#masterOverlay").classList.add("hidden");
   clearInterval(mstate.pollTimer);
@@ -218,12 +221,13 @@ async function refreshPlace() {
       settingsNotice(`この間に <b>${escapeHtml(whoText(m.updated_by))}</b> が参照先を更新しました（${hhmm(m.updated_at)}）。保存するときに、直している項目が変わっていないかを確かめます。`);
       continue;
     }
-    if (mstate.editing && mstate.editing.tab === tab) {
+    if (mstate.editing && mstate.editing.tab === tab && formDirty()) {
       showFormNotice("wait", `この間に <b>${escapeHtml(whoText(m.updated_by))}</b> が${MASTER_DEFS[tab].label}を更新しました（${hhmm(m.updated_at)}）。
         保存するときに、開いている行が変わっていないかを確かめます。`);
       continue;
     }
     mstate.data[tab] = null;
+    if (mstate.editing && mstate.editing.tab === tab) mstate.editing = null;   // 直していない詳細は、読み込んだ新しい内容で出し直す
     await ensureTabLoaded(tab);
     if (tab === mstate.tab) renderMasterTable();
     news.push(`${MASTER_DEFS[tab].label}: ${whoText(m.updated_by)} の変更を読み込みました（${hhmm(m.updated_at)}）`);
@@ -261,25 +265,24 @@ function paintPlace(news) {
   roTag.classList.toggle("hidden", !ro);
   roTag.textContent = "閲覧のみ";
   roTag.title = `${readOnlyWhy(mstate.tab)}のため、このマスタは書き換えられません`;
-  document.querySelectorAll("#masterBody .row-btn").forEach((b) => {
-    const del = b.dataset.act === "del";
-    b.disabled = down || (ro && del);
-    b.classList.toggle("hidden", ro && del);
-    b.title = down ? "共有フォルダに届かないため、いまは保存できません" : ro && !del ? "中身を見る（閲覧のみ）" : b.title;
-  });
+  paintDetailButtons();
 }
 
 /* ---------------- タブ ---------------- */
 function buildMasterTabs() {
   const tabs = $("#masterTabs");
+  let group = "";
   tabs.innerHTML = Object.keys(MASTER_DEFS).filter(tabVisible).map((k) => {
     const def = MASTER_DEFS[k];
     const rows = mstate.data[k];
     const count = rows && !def.custom ? `<span class="tab-count">${rows.length}</span>` : "";
-    return `<button class="tab${k === mstate.tab ? " active" : ""}" data-tab="${k}" role="tab">${def.label}${count}</button>`;
+    const head = def.group !== group ? `<span class="mg-lab">${(group = def.group)}</span>` : "";
+    return `${head}<button class="tab${k === mstate.tab ? " active" : ""}" data-tab="${k}" role="tab" aria-selected="${k === mstate.tab}">${def.label}${count}</button>`;
   }).join("");
   tabs.querySelectorAll(".tab").forEach((b) => b.onclick = () => {
+    if (b.dataset.tab === mstate.tab || !leaveOk()) return;
     mstate.tab = b.dataset.tab;
+    mstate.editing = null; mstate.selId = null;   // 行の番号はマスタごとなので、移ったら先頭から
     mstate.search = "";
     $("#masterSearch").value = "";
     buildMasterTabs();
@@ -363,6 +366,8 @@ function bindSettingCard(card) {
   const key = card.dataset.key, input = card.querySelector(".ps-input"), out = card.querySelector(".ps-result");
   const say = (kind, html) => { out.className = "ps-result " + kind; out.innerHTML = html; };
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") card.querySelector(".ps-save").click(); });
+  // 保存は、直したカードだけ主の色（黄）にする。並んだカードのどれを保存すればよいかが色で分かる
+  input.addEventListener("input", () => card.querySelector(".ps-save").classList.toggle("is-dirty", input.value !== (input.dataset.saved || "")));
   card.querySelector(".ps-check").onclick = async () => {
     say("wait", "確かめています…");
     // 確かめる先は項目が決める（更新の置き場は、探す本人のデスクトップ版: /__desktop/update/probe）
@@ -403,26 +408,22 @@ async function openMasterAt(tab) {
 window.openMasterAt = openMasterAt;
 
 function renderMasterTable() {
-  const custom = !!MASTER_DEFS[mstate.tab].custom;
+  const def = MASTER_DEFS[mstate.tab], custom = !!def.custom;
   document.querySelector("#masterOverlay .master-toolbar").classList.toggle("hidden", custom);
   document.querySelector("#masterOverlay .master-table-wrap").classList.toggle("hidden", custom);
+  $("#masterDetail").classList.toggle("hidden", custom);
   $("#masterSettings").classList.toggle("hidden", !custom);
   clearInterval(mstate.presenceTimer);
-  if (custom) { (MASTER_DEFS[mstate.tab].render || renderSettings)(); return; }
-  const def = MASTER_DEFS[mstate.tab];
+  if (custom) { (def.render || renderSettings)(); return; }
   const rows = filteredRows(mstate.tab);
   $("#masterSearch").placeholder = def.searchPlaceholder || "検索";
   const widths = columnWidths(def, mstate.data[mstate.tab] || []);
   $("#masterHead").innerHTML = "<tr>" + def.listColumns.map((c, i) =>
-    `<th class="${c.num ? "num" : ""}${c.grow ? " grow" : ""}"${widths[i] ? ` style="width:${widths[i]}px"` : ""}>${c.label}${c.unit ? `<small>${c.unit}</small>` : ""}</th>`).join("")
-    + '<th class="actions" aria-label="操作"></th></tr>';
-  // 行のどこを押しても（Enter でも）編集。削除は目立たない印（乗せると赤）で、押し間違いを減らす
+    `<th class="${c.num ? "num" : ""}${c.grow ? " grow" : ""}"${widths[i] ? ` style="width:${widths[i]}px"` : ""}>${c.label}${c.unit ? `<small>${c.unit}</small>` : ""}</th>`).join("") + "</tr>";
+  // 行のどこを押しても（Enter でも）右の詳細がその行になる。削除は右の詳細の「削除」か Delete キー（押し間違いを減らす）
   $("#masterBody").innerHTML = rows.map((row) => {
     const tds = def.listColumns.map((c, i) => `<td class="${c.num ? "num" : ""}${c.grow ? " grow" : ""}">${cellHtml(c, row[c.key])}${i === 0 && def.rowNote ? def.rowNote(row) : ""}</td>`).join("");
-    return `<tr data-id="${row.id}" tabindex="0" title="${canWrite(mstate.tab) ? "押すと編集" : "押すと中身を見る（閲覧のみ）"}">${tds}<td class="actions">
-      <button class="row-btn" data-act="edit" data-id="${row.id}" aria-label="編集" title="編集（行を押しても開きます）">${ICON.edit}</button>
-      <button class="row-btn danger" data-act="del" data-id="${row.id}" aria-label="削除" title="削除（確かめてから消します）">${ICON.del}</button>
-    </td></tr>`;
+    return `<tr data-id="${row.id}" tabindex="0" aria-selected="false">${tds}</tr>`;
   }).join("");
   $("#masterEmpty").classList.toggle("hidden", rows.length > 0);
   const all = mstate.data[mstate.tab];
@@ -431,23 +432,32 @@ function renderMasterTable() {
   paintPlace();
   const rowOf = (id) => (mstate.data[mstate.tab] || []).find((r) => r.id === Number(id));
   $("#masterBody").querySelectorAll("tr[data-id]").forEach((tr) => {
-    tr.onclick = (e) => {
-      const b = e.target.closest("button[data-act]");
-      if (b && b.disabled) return;
-      if (shareDown() && !b) return;
-      if (b && b.dataset.act === "del") openDeleteConfirm(mstate.tab, rowOf(tr.dataset.id));
-      else openForm(mstate.tab, rowOf(tr.dataset.id));
-    };
+    tr.onclick = () => { if (Number(tr.dataset.id) !== mstate.selId && leaveOk()) openForm(mstate.tab, rowOf(tr.dataset.id), { focus: false }); };
     tr.onkeydown = (e) => {
       if (e.target !== tr) return;
-      if (e.key === "Enter") { e.preventDefault(); tr.click(); }
+      if (e.key === "Enter") { e.preventDefault(); if (Number(tr.dataset.id) === mstate.selId || leaveOk()) openForm(mstate.tab, rowOf(tr.dataset.id)); }
       else if (e.key === "Delete" && !shareDown() && canWrite(mstate.tab)) { e.preventDefault(); openDeleteConfirm(mstate.tab, rowOf(tr.dataset.id)); }
       else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
         const next = e.key === "ArrowDown" ? tr.nextElementSibling : tr.previousElementSibling;
-        if (next) next.focus();
+        if (next) { next.focus(); next.click(); }   // 矢印で行を移ると、右もその行になる（直している途中なら確かめる）
       }
     };
+  });
+  // 右の詳細: 直している途中（追加の途中も）はそのまま。そうでなければ選んでいた行（無ければ先頭）を出す
+  const ed = mstate.editing;
+  const keep = ed && ed.tab === mstate.tab && (ed.id == null || rowOf(ed.id));
+  if (!keep) {
+    const pick = rows.find((r) => r.id === mstate.selId) || rows[0];
+    if (pick) openForm(mstate.tab, pick, { focus: false }); else showDetailEmpty();
+  }
+  markSelected();
+}
+/** 一覧で、右に出している行に印（藍の帯）を付ける */
+function markSelected() {
+  $("#masterBody").querySelectorAll("tr[data-id]").forEach((tr) => {
+    const on = mstate.editing && mstate.editing.id != null && Number(tr.dataset.id) === mstate.editing.id;
+    tr.classList.toggle("is-sel", !!on); tr.setAttribute("aria-selected", !!on);
   });
 }
 /* 列の幅: 見出しと（絞り込む前の）全部の値のうちいちばん長いものを、実際の文字の幅で測って決める
@@ -879,12 +889,6 @@ async function presenceAct(kind, key, btn) {
   renderPresence();
 }
 
-/* 行の操作の印（線の図。絵文字は PC によって形がそろわない・出ないことがある） */
-const svgIcon = (d) => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
-const ICON = {
-  edit: svgIcon('<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="m13.5 6.5 4 4"/>'),
-  del: svgIcon('<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/>'),
-};
 /* 値の見せ方: 意味のある札にして、読まずに見分けられるようにする（未設定は目立たせ、「なし」は淡く）。 */
 const REWIND = { "上": ["上巻き", "c-up"], "下": ["下巻き", "c-down"] };
 const LINE = { "←": ["← 左へ", "c-line"], "→": ["右へ →", "c-line"] };
@@ -910,14 +914,17 @@ $("#masterSearch").addEventListener("input", (e) => { mstate.search = e.target.v
 $("#masterBtn").onclick = openMaster;
 $("#masterCloseBtn").onclick = closeMaster;
 TPA.layer($("#masterOverlay"), closeMaster);
-$("#masterAddBtn").onclick = () => openForm(mstate.tab, null);
+$("#masterAddBtn").onclick = () => { if (!leaveOk()) return; mstate.prevSel = mstate.selId; openForm(mstate.tab, null); };
 
 /* ---------------- 追加・編集フォーム ---------------- */
-function openForm(tab, row) {
+/* 右の詳細に行（row）を出す。row が無ければ追加の空の欄。focus: 最初の欄へ移るか（行を押しただけなら移らない） */
+function openForm(tab, row, { focus = true } = {}) {
   const def = MASTER_DEFS[tab];
   mstate.editing = { tab, id: row ? row.id : null, baseRev: row ? (row.rev ?? null) : null };
+  mstate.selId = row ? row.id : null;
   hideFormNotice();
-  $("#masterFormTitle").textContent = row ? `${def.label}を編集` : `${def.label}を追加`;
+  const name = row ? row[def.idField] || row[def.listColumns[0].key] || "" : "";
+  $("#masterFormTitle").textContent = row ? `「${name}」を直す` : `${def.label}に追加`;
   $("#masterFormError").classList.add("hidden");
   $("#masterFormBody").innerHTML = def.formFields.map((f) => {
     const val = row ? escapeHtml(row[f.key]) : "";
@@ -935,16 +942,48 @@ function openForm(tab, row) {
     const hint = f.hint ? `<small class="f-hint">${escapeHtml(f.hint)}</small>` : "";
     return `<div class="f-field${f.full ? " full" : ""}"><label>${f.label}${req}</label>${input}${hint}</div>`;
   }).join("");
-  // 書けないときは見るだけ（欄は止め、保存は出さない）
+  // 書けないときは見るだけ（欄は止め、保存・削除は出さない）
   const ro = !canWrite(tab);
   $("#masterFormBody").querySelectorAll("input,select,textarea").forEach((el) => { el.disabled = ro; });
-  $("#masterFormSaveBtn").classList.toggle("hidden", ro);
-  if (ro && row) $("#masterFormTitle").textContent = `${def.label}を見る（閲覧のみ）`;
-  $("#masterFormOverlay").classList.remove("hidden");
-  const first = $("#masterFormBody").querySelector("input,select,textarea");
-  if (first) first.focus();
+  if (ro && row) $("#masterFormTitle").textContent = `「${name}」（閲覧のみ）`;
+  showDetail(true);
+  mstate.editing.orig = JSON.stringify(formValues());   // 直したかどうか（formDirty）の物差し
+  paintDetailButtons();
+  markSelected();
+  if (focus) $("#masterFormBody").querySelector("input,select,textarea")?.focus();
 }
-function closeForm() { $("#masterFormOverlay").classList.add("hidden"); mstate.editing = null; hideFormNotice(); }
+/** 右の詳細の欄と、空のときの案内を切り替える */
+function showDetail(on) {
+  ["#masterFormBody", "#masterFormFoot"].forEach((sel) => $(sel).classList.toggle("hidden", !on));
+  $("#masterFormTitle").parentElement.classList.toggle("hidden", !on);
+  $("#masterDetailEmpty").classList.toggle("hidden", on);
+}
+function showDetailEmpty() { mstate.editing = null; hideFormNotice(); showDetail(false); markSelected(); }
+/** 保存・削除・元に戻すを、いまの状態（書けるか・届くか・直したか）に合わせる */
+function paintDetailButtons() {
+  const ed = mstate.editing; if (!ed) return;
+  const ro = !canWrite(ed.tab), down = shareDown(), dirty = formDirty();
+  const why = down ? "共有フォルダに届かないため、いまは保存できません" : "";
+  $("#masterFormSaveBtn").classList.toggle("hidden", ro);
+  $("#masterFormSaveBtn").disabled = down;
+  $("#masterFormSaveBtn").title = why;
+  $("#masterFormDelBtn").classList.toggle("hidden", ro || ed.id == null);
+  $("#masterFormDelBtn").disabled = down;
+  $("#masterFormCancelBtn").classList.toggle("hidden", ro || (!dirty && ed.id != null));   // 直していない行では出さない（押しても何も起きない）
+  $("#masterFormCancelBtn").textContent = ed.id == null ? "やめる" : "元に戻す";
+}
+/** 右の詳細を直したか（保存していない変更があるか） */
+function formDirty() {
+  const ed = mstate.editing;
+  return !!ed && !!ed.orig && JSON.stringify(formValues()) !== ed.orig;
+}
+/** 直している途中なら、捨ててよいかを聞く（行・タブを移る・閉じる前） */
+function leaveOk() {
+  if (!formDirty()) return true;
+  if (!confirm("右の詳細に保存していない変更があります。捨てて移りますか？")) return false;
+  mstate.editing = null;
+  return true;
+}
 function showFormNotice(kind, html) { const n = $("#masterFormNotice"); n.className = "master-notice " + kind; n.innerHTML = html; }
 function hideFormNotice() { const n = $("#masterFormNotice"); n.className = "master-notice hidden"; n.innerHTML = ""; }
 function formValues() {
@@ -962,8 +1001,8 @@ function showConflict(def, mine, current, message) {
       <div class="acts"><button type="button" class="primary" id="cfAddNew">新しい行として追加し直す</button>
       <button type="button" id="cfClose">閉じて一覧を読み直す</button></div>`);
     $("#cfAddNew").onclick = () => { mstate.editing.id = null; mstate.editing.baseRev = null; hideFormNotice();
-      $("#masterFormTitle").textContent = `${def.label}を追加`; };
-    $("#cfClose").onclick = () => { const t = mstate.editing.tab; closeForm(); reloadTab(t); };
+      $("#masterFormTitle").textContent = `${def.label}に追加`; paintDetailButtons(); };
+    $("#cfClose").onclick = () => { const t = mstate.editing.tab; mstate.editing = null; mstate.selId = null; reloadTab(t); };
     return;
   }
   const diff = def.formFields.filter((f) => String(current[f.key] ?? "") !== String(mine[f.key] ?? ""));
@@ -977,9 +1016,12 @@ function showConflict(def, mine, current, message) {
   $("#cfTheirs").onclick = () => { setFormValues(current); mstate.editing.baseRev = current.rev; hideFormNotice(); };
   $("#cfMine").onclick = () => { mstate.editing.baseRev = current.rev; hideFormNotice(); $("#masterFormSaveBtn").click(); };
 }
-$("#masterFormCloseBtn").onclick = closeForm;
-$("#masterFormCancelBtn").onclick = closeForm;
-TPA.layer($("#masterFormOverlay"), closeForm);
+// 元に戻す: 保存してある内容を出し直す（追加の途中なら、やめて前に選んでいた行へ）
+$("#masterFormCancelBtn").onclick = () => { const ed = mstate.editing; mstate.editing = null; if (ed && ed.id == null) mstate.selId = mstate.prevSel ?? null; renderMasterTable(); };
+$("#masterFormDelBtn").onclick = () => { const ed = mstate.editing; const row = ed && (mstate.data[ed.tab] || []).find((r) => r.id === ed.id); if (row) openDeleteConfirm(ed.tab, row); };
+$("#masterFormBody").addEventListener("input", paintDetailButtons);
+$("#masterFormBody").addEventListener("change", paintDetailButtons);
+$("#masterFormBody").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.ctrlKey) { e.preventDefault(); $("#masterFormSaveBtn").click(); } });   // Ctrl+Enter で保存
 
 $("#masterFormSaveBtn").onclick = async () => {
   const editing = mstate.editing;
@@ -1007,7 +1049,8 @@ $("#masterFormSaveBtn").onclick = async () => {
     if (res.status === 409 && res.data.kind === "conflict") { showConflict(def, data, res.data.current, res.data.error); return; }
     if (!res.ok) throw new Error(res.data.error || "保存に失敗しました。");
     hideFormNotice();
-    closeForm();
+    mstate.editing = null;
+    if (!id && res.data && res.data.id != null) mstate.selId = res.data.id;
     await reloadTab(tab);
     afterMasterChange();
   } catch (e) {
@@ -1047,6 +1090,7 @@ $("#masterDeleteConfirmBtn").onclick = async () => {
     }
     if (!res.ok) throw new Error(res.data.error || "削除に失敗しました。");
     closeDeleteConfirm();
+    if (mstate.selId === id) { mstate.selId = null; mstate.editing = null; }
     await reloadTab(tab);
     afterMasterChange();
   } catch (e) {
