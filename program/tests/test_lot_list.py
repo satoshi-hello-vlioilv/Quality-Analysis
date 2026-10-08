@@ -334,7 +334,8 @@ class GroupTests(Base):
         c = sqlite3.connect(self.share)
         c.execute("CREATE TABLE [番号なし] (設備 TEXT)")
         c.executemany("INSERT INTO [番号なし] VALUES (?)", [("A",), ("B",)])
-        c.commit(); c.close()
+        c.commit()
+        c.close()
         out = self.q(table="番号なし")
         self.assertNotIn("groups", out)
         self.assertEqual(out["count"], 2)
@@ -349,7 +350,8 @@ class RelativeDateTests(Base):
         c = sqlite3.connect(self.share)
         c.execute("CREATE TABLE [日付] (ロット番号 TEXT, 登録日時 TEXT, 数 TEXT)")
         c.executemany("INSERT INTO [日付] VALUES (?,?,'1')", rows)
-        c.commit(); c.close()
+        c.commit()
+        c.close()
         from datetime import date
         self.today = date(2026, 9, 29)
 
@@ -398,7 +400,8 @@ class RelativeDateWholeTableTests(Base):
         c = sqlite3.connect(self.share)
         c.execute("CREATE TABLE [大きい] (ロット番号 TEXT, 登録日時 TEXT, 発生設備 TEXT)")
         c.executemany("INSERT INTO [大きい] VALUES (?,?,?)", rows)
-        c.commit(); c.close()
+        c.commit()
+        c.close()
         self.rows = rows
 
     def q(self, *conds, **kw):
@@ -546,7 +549,8 @@ class SortKeyTests(unittest.TestCase):
                     with self.subTest(levels=levels, group=group):
                         r = lot_list.query(db, page_size=2000, group=group,
                                            sorts=json.dumps([{"column": c, "dir": d} for c, d in levels], ensure_ascii=False))
-                        key = lambda row, c: (sort_key(str(row[c] or "").upper()) if c == "ロット番号" else sort_key(row[c]))
+                        def key(row, c):
+                            return sort_key(str(row[c] or "").upper()) if c == "ロット番号" else sort_key(row[c])
                         for k in range(len(levels)):
                             seen, prev = set(), object()
                             for row in r["rows"]:
@@ -555,3 +559,39 @@ class SortKeyTests(unittest.TestCase):
                                     self.assertNotIn(path, seen, f"段{k + 1} {levels[k][0]} の {path} が2か所に分かれた")
                                     seen.add(path)
                                     prev = path
+
+
+class ShownKeyTests(unittest.TestCase):
+    """見えている値でまとめる（版 3.13.0）: 日付だけ・年月・丸めた数で見せる段は、サーバーも同じ丸め方で並べる。
+    3.12.0 までは元の値で並べたので、時刻の違う同じ日付が別々になり、下の段の並びもそこで振り出しに戻った。"""
+
+    def test_kind(self):
+        k = lot_list.sort_key_kind
+        self.assertEqual([k("date"), k("MONTH"), k(" year "), k("round:2"), k("Round:12"), k("round:x"), k(3), k(None), k("round:٣")],
+                         ["date", "month", "year", "round:2", "round:10", "", "", "", ""])
+
+    def test_same_shown_value_stays_together_and_inner_level_is_sorted(self):
+        from app.services.sqlite_ro import sort_key, to_date
+        from tests import lotlist_fixture
+
+        def order(v):      # SQLite の並び: NULL → 数 → 字（設備は字か空欄）
+            k = sort_key(v)
+            return (0, "") if k is None else (1, k) if isinstance(k, (int, float)) else (2, k)
+        with tempfile.TemporaryDirectory() as d:
+            db = os.path.join(d, "fx.sqlite3")
+            lotlist_fixture.make(db, 1500)
+            cases = [("date", lambda v: to_date(v) or str(v or "").strip()), ("month", lambda v: (to_date(v) or "")[:7] or str(v or "").strip())]
+            for key, shown in cases:
+                with self.subTest(key=key):
+                    r = lot_list.query(db, page_size=2000, sorts=json.dumps(
+                        [{"column": "発生日", "dir": "asc", "key": key}, {"column": "設備", "dir": "asc"}], ensure_ascii=False))
+                    self.assertEqual(r["sorts"][0], {"column": "発生日", "dir": "asc", "key": key})
+                    seen, prev, inner = set(), object(), []
+                    for row in r["rows"]:
+                        v = shown(row["発生日"])
+                        if v != prev:
+                            self.assertNotIn(v, seen, f"{key}: {v} が2か所に分かれた")
+                            seen.add(v)
+                            prev, inner = v, []
+                        inner.append(order(row["設備"]))
+                        self.assertEqual(inner, sorted(inner), f"{key}: {v} の中の設備が並んでいない")

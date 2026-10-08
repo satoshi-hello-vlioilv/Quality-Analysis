@@ -415,19 +415,36 @@ fn build_filter_where(filters: &[Filter], today: NaiveDate) -> Result<(Vec<Strin
     Ok((parts, params))
 }
 
-fn safe_sorts(text: &str, cs: &[String]) -> Vec<(String, &'static str)> {
+/// 並べ替え1つ（列・向き・鍵の形）。鍵の形は画面が列の書式から決める（Python の lot_list.sort_key_kind と同じ）。
+pub type Sort = (String, &'static str, String);
+
+/// 鍵の形: date・month・year・round:N（N は 0〜10）。分からなければ ""（そのままの値）。
+fn sort_key_kind(v: &str) -> String {
+    let k = v.to_lowercase();
+    if ["date", "month", "year"].contains(&k.as_str()) {
+        return k;
+    }
+    match k.strip_prefix("round:") {
+        Some(n) if (1..=2).contains(&n.len()) && n.bytes().all(|b| b.is_ascii_digit()) => {
+            format!("round:{}", n.parse::<u32>().unwrap_or(0).min(10))
+        }
+        _ => String::new(),
+    }
+}
+
+fn safe_sorts(text: &str, cs: &[String]) -> Vec<Sort> {
     let items = if text.is_empty() { Value::Array(vec![]) } else { serde_json::from_str(text).unwrap_or(Value::Array(vec![])) };
-    let mut out: Vec<(String, &'static str)> = vec![];
+    let mut out: Vec<Sort> = vec![];
     for it in items.as_array().into_iter().flatten() {
-        let (col, dir) = match it {
-            Value::String(s) => (pyfmt::strip(s).to_string(), String::new()),
-            Value::Object(o) => (field(o, "column", ""), field(o, "dir", "")),
+        let (col, dir, key) = match it {
+            Value::String(s) => (pyfmt::strip(s).to_string(), String::new(), String::new()),
+            Value::Object(o) => (field(o, "column", ""), field(o, "dir", ""), field(o, "key", "")),
             _ => continue,
         };
-        if !cs.contains(&col) || out.iter().any(|(c, _)| *c == col) {
+        if !cs.contains(&col) || out.iter().any(|(c, _, _)| *c == col) {
             continue;
         }
-        out.push((col, if dir.to_lowercase() == "desc" { "DESC" } else { "ASC" }));
+        out.push((col, if dir.to_lowercase() == "desc" { "DESC" } else { "ASC" }, sort_key_kind(&key)));
         if out.len() >= MAX_SORTS {
             break;
         }
@@ -435,13 +452,28 @@ fn safe_sorts(text: &str, cs: &[String]) -> Vec<(String, &'static str)> {
     out
 }
 
-/// 並べ替えに使う式（Python の lot_list.order_key と同じ）。ロット番号の列は大小を同じに見る。
-fn order_key(col: &str, lot: &str) -> String {
-    if col == lot {
-        format!("SortKey(UPPER(CStr({})))", qi(col))
-    } else {
-        format!("SortKey({})", qi(col))
+/// 並べ替えに使う式（Python の lot_list.order_key と同じ）。ふだんは SortKey（ロット番号の列は大小を同じに）。
+/// 日付だけ・年月・年で見せる列は ToDate の頭（読めない値はその後ろで SortKey）、小数 N 桁で見せる列は丸めた数。
+fn order_key(col: &str, lot: &str, key: &str) -> Vec<String> {
+    let q = qi(col);
+    let head = match key {
+        "date" => Some(format!("ToDate({q})")),
+        "month" => Some(format!("SUBSTR(ToDate({q}), 1, 7)")),
+        "year" => Some(format!("SUBSTR(ToDate({q}), 1, 4)")),
+        _ => None,
+    };
+    if let Some(h) = head {
+        return vec![h, format!("CASE WHEN ToDate({q}) IS NULL THEN SortKey({q}) END")];
     }
+    if let Some(n) = key.strip_prefix("round:") {
+        return vec![format!("CASE WHEN typeof(SortKey({q})) IN ('integer', 'real') THEN ROUND(SortKey({q}), {n}) ELSE SortKey({q}) END")];
+    }
+    vec![if col == lot { format!("SortKey(UPPER(CStr({q})))") } else { format!("SortKey({q})") }]
+}
+
+/// [(列, 向き, 鍵の形)] → ORDER BY の後ろ（Python の lot_list.order_sql と同じ）。
+fn order_sql(order: &[Sort], lot: &str) -> String {
+    order.iter().flat_map(|(c, d, k)| order_key(c, lot, k).into_iter().map(move |x| format!("{x} {d}"))).collect::<Vec<_>>().join(",")
 }
 
 fn lot_key(col: &str) -> String {
@@ -463,12 +495,8 @@ fn rowid_name(c: &Connection, t: &str, raw_cs: &[String]) -> Option<&'static str
 }
 
 /// まとめた並びの SQL（Python の grouped_sql と同じ文）。最後の ? はページ。
-pub fn grouped_sql(t: &str, raw_cs: &[String], lot: &str, wh: &str, order: &[(String, &str)], size: i64, rid: Option<&str>) -> String {
-    let over = if order.is_empty() {
-        String::new()
-    } else {
-        format!("ORDER BY {}", order.iter().map(|(c, d)| format!("{} {d}", order_key(c, lot))).collect::<Vec<_>>().join(","))
-    };
+pub fn grouped_sql(t: &str, raw_cs: &[String], lot: &str, wh: &str, order: &[Sort], size: i64, rid: Option<&str>) -> String {
+    let over = if order.is_empty() { String::new() } else { format!("ORDER BY {}", order_sql(order, lot)) };
     let cols = raw_cs.iter().map(|x| qi(x)).collect::<Vec<_>>().join(", ");
     let steps = "
         k AS (SELECT *, CASE WHEN _tpa_k0 = '' THEN '#' || _tpa_rn ELSE _tpa_k0 END AS _tpa_k FROM b),
@@ -493,8 +521,11 @@ JOIN {qt} ON {qt}.{rid} = r._tpa_id WHERE r._tpa_page = ? ORDER BY r._tpa_pos"
     }
 }
 
+/// 読んだ行（各行の値と、続きの数の列）。
+type Rows = (Vec<Vec<Value>>, Vec<Vec<i64>>);
+
 /// 行を読む（各行の値と、続きの数の列）。
-fn read_rows(c: &Connection, sql: &str, params: &[SqlValue], ncols: usize) -> Result<(Vec<Vec<Value>>, Vec<Vec<i64>>), String> {
+fn read_rows(c: &Connection, sql: &str, params: &[SqlValue], ncols: usize) -> Result<Rows, String> {
     let mut st = c.prepare(sql).map_err(sql_err)?;
     let total = st.column_count();
     let mut rows = st.query(params_from_iter(params.iter())).map_err(sql_err)?;
@@ -631,11 +662,7 @@ pub fn query(path: &Path, a: &Args, preferred_table: &str, default_page_size: i6
     let wh = if where_parts.is_empty() { String::new() } else { format!(" WHERE {}", where_parts.join(" AND ")) };
     let lot = lot_column(&cs);
     let order_parts = safe_sorts(&a.sorts, &cs);
-    let order = if order_parts.is_empty() {
-        String::new()
-    } else {
-        format!(" ORDER BY {}", order_parts.iter().map(|(c, d)| format!("{} {d}", order_key(c, &lot))).collect::<Vec<_>>().join(","))
-    };
+    let order = if order_parts.is_empty() { String::new() } else { format!(" ORDER BY {}", order_sql(&order_parts, &lot)) };
     let qt = qi(&t);
     let total = count(&c, &format!("SELECT COUNT(*) FROM {qt}{wh}"), &params)?;
     let start = (page - 1).saturating_mul(size);
@@ -677,7 +704,13 @@ pub fn query(path: &Path, a: &Args, preferred_table: &str, default_page_size: i6
         "today": today.format("%Y-%m-%d").to_string(), "dateHints": hints, "rows": rows,
         "count": total, "page": page, "page_size": size, "range": [first, last],
         "filters_applied": fl.len(),
-        "sorts": order_parts.iter().map(|(c, d)| json!({"column": c, "dir": d.to_lowercase()})).collect::<Vec<_>>(),
+        "sorts": order_parts.iter().map(|(c, d, k)| {
+            let mut o = json!({"column": c, "dir": d.to_lowercase()});
+            if !k.is_empty() {
+                o["key"] = json!(k);
+            }
+            o
+        }).collect::<Vec<_>>(),
         "timing": {"server": t0.elapsed().as_millis() as u64},
     });
     if let Value::Object(b) = base {

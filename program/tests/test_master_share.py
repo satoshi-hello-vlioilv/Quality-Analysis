@@ -108,7 +108,8 @@ class WriteCycle(Base):
     def test_write_pulls_first_and_bumps_revision(self):
         a = self.env.repo("PC-A", refresh=60)
         b = self.env.repo("PC-B", refresh=60)
-        a.rolls(); b.rolls()                                    # 両方とも写しを持つ（版1）
+        a.rolls()
+        b.rolls()                                    # 両方とも写しを持つ（版1）
         x = b.rolls_update(1, {"備考": "B が変更"}, base_rev=1)  # 共有は版2
         y = a.rolls_update(2, {"備考": "A が変更"}, base_rev=1)  # A の写しは古い（版1）まま書く
         rows = {r["id"]: r for r in self.env.share_doc()["rows"]}
@@ -140,7 +141,8 @@ class WriteCycle(Base):
     def test_duplicate_equipment_name_across_pcs(self):
         a = self.env.repo("PC-A", refresh=60)
         b = self.env.repo("PC-B", refresh=60)
-        a.equipment(); b.equipment()
+        a.equipment()
+        b.equipment()
         b.equipment_create({"設備名": "NEW-1"})
         with self.assertRaises(DuplicateKey):
             a.equipment_create({"設備名": "new-1"})            # A の写しにはまだ無いが、取り直して気づく

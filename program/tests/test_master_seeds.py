@@ -17,7 +17,8 @@ class Seeds(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         shutil.copytree(ROOT / "data", self.tmp / "app" / "data")
-        self.share = self.tmp / "share"; self.share.mkdir()
+        self.share = self.tmp / "share"
+        self.share.mkdir()
         # 共有にはもう前の版の設備マスタがある（検査計の列が無い・NS1 も無い）。権限はまだ無い
         old = [{k: v for k, v in r.items() if k != "検査計"} for r in json.loads((ROOT / "data" / "equipment_master.json").read_text(encoding="utf-8"))
                if r["設備名"] != "NS1"]

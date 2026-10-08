@@ -173,8 +173,10 @@
     },
     /** メニューを基準の要素の下に置く（左端か右端をそろえ、画面の左右からはみ出さない）。 */
     placeBelow(el, anchor, align = "left") {
-      const r = anchor.getBoundingClientRect(), w = el.offsetWidth;
-      el.style.top = `${Math.round(r.bottom + 6)}px`;
+      const r = anchor.getBoundingClientRect(), w = el.offsetWidth, top = Math.round(r.bottom + 6);
+      el.style.top = `${top}px`;
+      // 中でスクロールする窓は、置いた位置から画面の下端までに収める（下が切れて届かない所を作らない）
+      if (/auto|scroll/.test(getComputedStyle(el).overflowY)) el.style.maxHeight = `${Math.max(160, innerHeight - top - 8)}px`;
       el.style.left = `${Math.round(Math.max(8, Math.min(align === "right" ? r.right - w : r.left, innerWidth - w - 8)))}px`;
     },
     /** メニューを押した位置に置く（画面からはみ出さない）。 */

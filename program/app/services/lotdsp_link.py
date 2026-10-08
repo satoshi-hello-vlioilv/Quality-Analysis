@@ -82,16 +82,19 @@ def read_screen(html):
                     cand.append((_nfkc(rows[0][c]), "header"))
                 for rr in range(r - 1, -1, -1):                       # 同じ列の、上の見出し
                     if c < len(rows[rr]) and label_like(rows[rr][c]):
-                        cand.append((_nfkc(rows[rr][c]), "above")); break
+                        cand.append((_nfkc(rows[rr][c]), "above"))
+                        break
                 for cc in range(c - 1, -1, -1):                       # 同じ行の、左の見出し
                     if label_like(row[cc]):
-                        cand.append((_nfkc(row[cc]), "left")); break
+                        cand.append((_nfkc(row[cc]), "left"))
+                        break
                 if c > 0 and label_like(row[0]):
                     cand.append((_nfkc(row[0]), "row"))
                 seen, labels = set(), []
                 for label, how in cand:
                     if label != _nfkc(v) and label not in seen:
-                        seen.add(label); labels.append((label, how))
+                        seen.add(label)
+                        labels.append((label, how))
                 cells.append({"value": _nfkc(v), "labels": labels, "tid": tid, "r": r, "c": c})
         if len(rows) >= 3:                                            # 見出し＋2行以上の表: 列ごとに行の順の値を持つ
             for c in range(width):

@@ -66,8 +66,11 @@ def entity_of(html, key_style="a", date_style="iso", density_elsewhere=False, de
                        hs="sbyky", vs="sbtty", pc="sbmh", dsm="sbsm", dbox="boxNo"),
              "b": dict(eq="setsubi", dt="hizuke", th="atsu", w="haba", wt="omosa", fo="offF", bo="offB", box="no",
                        hs="yoko", vs="tate", pc="maiHon", dsm="setsubiD", dbox="no")}[key_style]
-    iso = lambda s: to_moment(s, date_style)
-    num = lambda s: float(s) if s not in ("", None) else None
+    def iso(s):
+        return to_moment(s, date_style)
+
+    def num(s):
+        return float(s) if s not in ("", None) else None
     cur = []
     for r in actual:
         cur.append({names["box"]: r["no"], names["eq"]: r["equipment"], names["dt"]: iso(r["work_date"]), names["th"]: num(r["thickness"]),

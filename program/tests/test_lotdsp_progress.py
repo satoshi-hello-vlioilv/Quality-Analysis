@@ -99,7 +99,9 @@ class ParseVariants(unittest.TestCase):
         self.assertIn(("CAF", "CAL"), [(x["from"], x["to"]) for x in rep["renamed"]])
         for p in ps[6:]:
             self.assertTrue(p["equipment"])
-            self.assertIsNone(p["thickness"]); self.assertIsNone(p["weight"]); self.assertIsNone(p["width"])
+            self.assertIsNone(p["thickness"])
+            self.assertIsNone(p["weight"])
+            self.assertIsNone(p["width"])
             self.assertEqual(p["work_date"], "")
             self.assertIsNone(p["design_split"])
         for p in ps[:6]:
