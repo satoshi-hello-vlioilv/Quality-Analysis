@@ -1,4 +1,4 @@
-# CLAUDE.md の「push 前の確かめ」を GitHub でも回す。
+# CLAUDE.md の「push 前の確かめ」を GitHub でも回す（型・構文・lint〔ruff・clippy〕・試験）。
 # - program: アプリは Python の標準の部品だけで動く（版 3.8.0 で Flask を外した）ので、部品は入れずに試す（入れないこと自体が確かめ）
 # - desktop: 窓（Rust・Tauri）の書式・作成・試験と、本物の窓（WebKitGTK）での自己診断（Windows の WebView2 は desktop.yml）
 name: CI
@@ -23,10 +23,15 @@ jobs:
       # 止まったままだと本物のブラウザの試験（test_lotdsp_direct.RealBrowser）で Chrome がすぐ終わるので外す。
       - name: Chrome のサンドボックスを使えるようにする
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      - name: lint（画面の JS の文法）
-        run: for f in program/app/static/js/*.js desktop/src/selftest.js; do node --check "$f"; done
-      - name: lint（Python の文法）
+      - name: 型・構文（画面の JS・道具の JS）
+        run: find program/app/static/js program/tools desktop/src -name '*.js' -o -name '*.mjs' | xargs -n1 node --check
+      - name: 型・構文（Python）
         run: python -m compileall -q program
+      # 手元と同じ版の ruff（版が変わると決まりが増えて、手元で通った物が落ちる）
+      - name: lint（Python・ruff）
+        run: |
+          pip install ruff==0.15.20
+          ruff check program
       - name: test（Python・アプリ）
         working-directory: program
         run: python -m unittest discover -s tests -t .
@@ -47,9 +52,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev xvfb
-      - uses: dtolnay/rust-toolchain@stable
+      # 手元と同じ版（clippy は版が上がると決まりが増え、手元で通った物が落ちる）。上げるときは手元と一緒に上げる
+      - uses: dtolnay/rust-toolchain@1.97.0
         with:
-          components: rustfmt
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop
@@ -59,6 +65,9 @@ jobs:
       - name: typecheck（Rust）
         working-directory: desktop
         run: cargo build --locked
+      - name: lint（Rust・clippy）
+        working-directory: desktop
+        run: cargo clippy --locked --all-targets -- -D warnings
       - name: test（Rust）
         working-directory: desktop
         run: cargo test --locked
