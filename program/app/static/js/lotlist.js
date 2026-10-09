@@ -228,7 +228,7 @@
     if (S.table) q.set("table", S.table);
     q.set("page", S.page); q.set("page_size", S.pageSize);
     if (S.search) q.set("search", S.search);
-    const list = S.genericFilters.map(({ column, op, value }) => ({ column, op, value })).concat(adhocFilters());
+    const list = baseFilters().concat(window.LotListSlicer.filters());
     if (list.length) q.set("filters", JSON.stringify(list));
     const sorts = effectiveSorts();
     if (sorts.length) q.set("sorts", JSON.stringify(sorts));
@@ -254,7 +254,7 @@
       S.loadedAt = (S.source && S.source.copiedAt) || null;
       store.set(KEY.table, S.table);
       // 表が初めて決まった（サーバーが既定の表を選んだ）ら、その表の覚えを戻して引き直す
-      if (contextKey !== S.table && syncContext() && (S.genericFilters.length || S.sorts.length || adhocActive() || grouped())) {
+      if (contextKey !== S.table && syncContext() && (S.genericFilters.length || S.sorts.length || adhocActive() || grouped() || window.LotListSlicer.filters().length)) {
         S.loading = false; return load();
       }
     } catch (e) {
@@ -263,6 +263,7 @@
     }
     S.loading = false;
     renderAll();
+    window.LotListSlicer.refresh();   // 件数を今の絞り込みで数え直す
   }
 
   /* ================= 表（コンテキスト）ごとの覚え ================= */
@@ -321,7 +322,7 @@
   function dropAllFilters({ adhoc: withAdhoc = false } = {}) {
     const locked = S.genericFilters.filter((f) => f.locked);
     S.genericFilters = locked.length && !confirmLocked(locked) ? locked : [];
-    if (withAdhoc) resetAdhoc();
+    if (withAdhoc) { resetAdhoc(); window.LotListSlicer.clearAll(); }   // 全件を見る: スライサーの選択も外す
   }
   function registeredPreset(f) {
     const k = filterKey(f);
@@ -395,6 +396,8 @@
   const adhocColumnOk = () => !!adhoc.column && (!S.columns.length || S.columns.includes(adhoc.column));
   const adhocActive = () => adhocColumnOk() && (noValueOp(adhoc.op)
     || (isRel(adhoc.op) ? /^\d+$/.test(String(adhoc.value || "").trim()) : !!String(adhoc.value || "").trim()));
+  /** スライサーより前の絞り込み（条件・列で絞り込む）。スライサーが自分の件数を数えるときにも使う */
+  const baseFilters = () => S.genericFilters.map(({ column, op, value }) => ({ column, op, value })).concat(adhocFilters());
   const adhocFilters = () => adhocActive() ? [{ column: adhoc.column, op: adhoc.op, value: noValueOp(adhoc.op) ? "" : String(adhoc.value).trim() }] : [];
   const adhocLabel = () => adhoc.column ? condLabel({ column: adhoc.column, op: adhoc.op, value: String(adhoc.value || "").trim() }) : "";
   function applyAdhoc(now) {
@@ -440,6 +443,7 @@
           <span class="fb-cond-key">条件</span><b id="llCondCount" class="fb-cond-n">0</b><i class="hd-caret" aria-hidden="true">▾</i>
         </button>
         <button id="llAdhocToggle" class="filter-adhoc-toggle" type="button" aria-expanded="false" aria-controls="llAdhocRow">列で絞り込む</button>
+        <button id="llSlicerBtn" class="sx-entry" type="button" aria-expanded="false" aria-controls="llSlicer" title="列の値（重複なし）を並べ、押して絞り込みます（Excel のスライサーと同じ）">スライサー</button>
         <div class="filter-token-input" id="llTokenInput" hidden>
           <span class="filter-token-key" aria-hidden="true">＋条件</span>
           <input class="filter-token-search" id="llTokenSearch" autocomplete="off" placeholder="列名・値を打つと候補が出ます" aria-label="条件を検索して足す">
@@ -1149,7 +1153,7 @@
         + ` <button type="button" data-ll-settings title="元ファイルの場所・名前を「マスタ管理」の「参照先」で直します">参照先を開く</button></div>`;
       note.hidden = false; return;
     }
-    const filtered = new Set(S.genericFilters.map((f) => f.column).concat(adhocFilters().map((f) => f.column)));
+    const filtered = new Set(baseFilters().concat(window.LotListSlicer.filters()).map((f) => f.column));
     const t = layoutTarget(), LC = window.LotListColumns;
     LC.setContext(columnContext());
     const all = LC.allColumns(t, S.columns);
@@ -1288,17 +1292,48 @@
 
   /* ---- 一覧の拡大（一時的: この窓のあいだだけ覚え、閉じると 100%） ----
      表に CSS の zoom を掛ける（列の幅・固定・見出しの貼り付きごと拡大する）。幅の覚えは拡大前の px のまま（lotlist-columns.js） */
-  const ZOOM = { key: "tpa.lotlist.zoom.v1", min: 60, max: 200, step: 10 };
+  const ZOOM = { key: "tpa.lotlist.zoom.v1", stepKey: "tpa.lotlist.zoomStep.v1", min: 60, max: 200, steps: [5, 10, 20, 25], step: 10 };
+  const zoomStep = () => { const s = +TPA.local.get(ZOOM.stepKey, ZOOM.step); return ZOOM.steps.includes(s) ? s : ZOOM.step; };
+  /** 刻み s で動ける範囲（どの刻みでも 100% に止まるように、端を 100% から刻みで数えた所にする） */
+  const zoomRange = (s) => ({ min: 100 - Math.floor((100 - ZOOM.min) / s) * s, max: 100 + Math.floor((ZOOM.max - 100) / s) * s });
   function setZoom(pct) {
-    const z = Math.min(ZOOM.max, Math.max(ZOOM.min, Math.round((+pct || 100) / ZOOM.step) * ZOOM.step));
+    const s = zoomStep(), { min, max } = zoomRange(s);
+    const z = Math.min(max, Math.max(min, 100 + Math.round(((+pct || 100) - 100) / s) * s));
     $("#llGrid").style.zoom = z === 100 ? "" : String(z / 100);
     $("#llZoomRange").value = z; $("#llZoomValue").textContent = `${z}%`;
+    $("#llZoomMinus").disabled = z <= min; $("#llZoomPlus").disabled = z >= max;
     $("#llZoomReset").hidden = z === 100; $("#llZoom").classList.toggle("is-zoomed", z !== 100);
     TPA.session.set(ZOOM.key, z);
   }
+  /** 刻みを当てる: つまみの範囲・刻み・目盛り（100% は長い線）・札の字 */
+  function paintZoomStep() {
+    const s = zoomStep(), { min, max } = zoomRange(s), r = $("#llZoomRange");
+    Object.assign(r, { min, max, step: s });
+    $("#llZoomTicks").innerHTML = Array.from({ length: (max - min) / s + 1 }, (_, i) => min + i * s)
+      .map((v) => `<i class="${v === 100 ? "is-100" : ""}" style="left:${(v - min) / (max - min) * 100}%"></i>`).join("");
+    $("#llZoomStep").textContent = `${s}%刻み ▾`;
+    $("#llZoomMinus").title = `${s}% 小さく`; $("#llZoomPlus").title = `${s}% 大きく`;
+  }
+  function openZoomSteps() {
+    const m = $("#llZoomSteps"), b = $("#llZoomStep");
+    m.innerHTML = ZOOM.steps.map((s) => `<button type="button" role="menuitemradio" aria-checked="${s === zoomStep()}" data-step="${s}">${s}%</button>`).join("");
+    m.hidden = false; b.setAttribute("aria-expanded", "true");
+    const close = () => { m.hidden = true; b.setAttribute("aria-expanded", "false"); };
+    const off = TPA.dismissable(m, close, { keep: b });
+    m.onclick = (e) => {
+      const x = e.target.closest("[data-step]"); if (!x) return;
+      TPA.local.set(ZOOM.stepKey, +x.dataset.step); paintZoomStep(); setZoom($("#llZoomRange").value);
+      off(); close(); b.focus();
+    };
+    m.querySelector('[aria-checked="true"]')?.focus();
+  }
   function bindZoom() {
     $("#llZoomRange").addEventListener("input", (e) => setZoom(e.target.value));
+    $("#llZoomMinus").addEventListener("click", () => setZoom(+$("#llZoomRange").value - zoomStep()));
+    $("#llZoomPlus").addEventListener("click", () => setZoom(+$("#llZoomRange").value + zoomStep()));
+    $("#llZoomStep").addEventListener("click", () => ($("#llZoomSteps").hidden ? openZoomSteps() : $("#llZoomStep").focus()));
     $("#llZoomReset").addEventListener("click", () => { setZoom(100); $("#llZoomRange").focus(); });
+    paintZoomStep();
     setZoom(TPA.session.get(ZOOM.key, 100));
   }
   function bindGrid() {
@@ -1384,6 +1419,11 @@
     root = $("#lotListScreen");
     onPick = opts.onPick || onPick;
     buildBar(); bindGrid();
+    window.LotListSlicer.mount({
+      table: () => S.table, columns: () => S.columns, search: () => S.search, baseFilters, keyOf: levelKeyKind,
+      label: (c) => window.LotListColumns.label(layoutTarget(), c),
+      onChange: () => { S.page = 1; load(); },
+    });
     window.LotListCard.mount({
       rows: () => S.rows, target: layoutTarget, lotColumn: () => S.lotColumn, lotKey,
       columns: () => window.LotListColumns.allColumns(layoutTarget(), S.columns),

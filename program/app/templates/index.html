@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/lotlist.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/lotlist-columns.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/lotlist-card.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/lotlist-slicer.css') }}">
 </head>
 <body>
 <header>
@@ -90,14 +91,21 @@
     <section id="llFilterBar" class="generic-filter-bar" aria-label="絞り込み"></section>
     <div class="ll-status">
       <span id="llCount" class="ll-count">全 0件</span>
+      <!-- スライサーで選んでいる値（「設備: CR1・L-1 ×」）。スライサーを閉じても何で絞っているかが分かる -->
+      <span id="llSlicerSum" class="sx-sum" hidden></span>
       <span id="llGroupBar" class="ll-groupbar" hidden></span>
       <span id="llCardShelf" class="lk-shelf" hidden role="toolbar" aria-label="開いているカード"></span>
       <span id="llCardHint" class="ll-hint" hidden title="「表の見せ方」の「機能」で使わないようにもできます">行をダブルクリックするとカードで見られます</span>
       <!-- 一覧だけを一時的に拡大（この窓を閉じると 100% に戻る）。100% でないときは数字を強めて「戻す」を出す -->
       <span id="llZoom" class="ll-zoom" title="一覧だけを一時的に拡大・縮小します（窓を閉じると 100% に戻ります）">
         <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.6"/><path d="M10.4 10.4 14 14"/></svg>
-        <input id="llZoomRange" type="range" min="60" max="200" step="10" value="100" aria-label="一覧の大きさ">
+        <button id="llZoomMinus" type="button" class="ll-zpm" aria-label="小さく">−</button>
+        <span class="ll-ztrack"><input id="llZoomRange" type="range" min="60" max="200" step="10" value="100" aria-label="一覧の大きさ"><span id="llZoomTicks" class="ll-zticks" aria-hidden="true"></span></span>
+        <button id="llZoomPlus" type="button" class="ll-zpm" aria-label="大きく">＋</button>
         <output id="llZoomValue" for="llZoomRange">100%</output>
+        <!-- 刻み（つまみ・−・＋ が動く幅）。押すと選ぶ。この PC に覚える -->
+        <button id="llZoomStep" type="button" class="ll-zstep" aria-haspopup="menu" aria-expanded="false" title="つまみ・−・＋ が動く幅を選びます">10%刻み ▾</button>
+        <span id="llZoomSteps" class="ll-zsteps" role="menu" hidden></span>
         <button id="llZoomReset" type="button" hidden title="100% に戻します">100%に戻す</button>
       </span>
       <div class="ll-pager">
@@ -106,10 +114,14 @@
         <button id="llNext" type="button" aria-label="次のページ">▶</button>
       </div>
     </div>
+    <!-- 表とスライサー（置き場は左・右・上。data-place） -->
+    <div class="ll-bodyrow" id="llBodyRow" data-place="left">
+    <aside id="llSlicer" class="sx-pane" hidden aria-label="スライサー"></aside>
     <div class="ll-grid-wrap">
       <table class="ll-grid" id="llGrid"><colgroup id="llCols"></colgroup><thead id="llHead"></thead><tbody id="llBody"></tbody></table>
       <style id="llTintStyle"></style>
       <div id="llNote" class="ll-note" hidden></div>
+    </div>
     </div>
     <!-- 登録した条件とプリセット -->
     <div id="llPresetModal" class="ll-pm" hidden role="dialog" aria-modal="true" aria-label="登録した条件とプリセット">
@@ -333,6 +345,7 @@
 <script src="{{ url_for('static', filename='js/lotlist-rules.js') }}"></script>
 <script src="{{ url_for('static', filename='js/lotlist-columns.js') }}"></script>
 <script src="{{ url_for('static', filename='js/lotlist-card.js') }}"></script>
+<script src="{{ url_for('static', filename='js/lotlist-slicer.js') }}"></script>
 <script src="{{ url_for('static', filename='js/lotlist.js') }}"></script>
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 <script src="{{ url_for('static', filename='js/master.js') }}"></script>

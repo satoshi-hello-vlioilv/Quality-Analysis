@@ -124,7 +124,21 @@
 /* 一覧の拡大（一時的）。100% でないあいだは数字をアンバーの札にして、拡大中だと分かるようにする */
 .ll-zoom{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
 .ll-zoom svg{width:15px;height:15px;fill:none;stroke:var(--h-input);stroke-width:1.6}
-.ll-zoom input{width:120px;accent-color:var(--h-input);cursor:pointer}
+.ll-zoom{position:relative}
+.ll-zoom input{width:140px;accent-color:var(--h-input);cursor:pointer;display:block;margin:0}
+/* 目盛り: 刻みごとの細い線（100% は長く濃い）。つまみの中心が動く幅（左右 8px を除く）に並べる */
+.ll-ztrack{position:relative;display:inline-block;padding-bottom:6px}
+.ll-zticks{position:absolute;left:8px;right:8px;bottom:0;height:7px;pointer-events:none}
+.ll-zticks i{position:absolute;bottom:0;width:1px;height:4px;background:#8193a4;transform:translateX(-50%)}
+.ll-zticks i.is-100{width:2px;height:7px;background:var(--h-input)}
+.ll-zoom .ll-zpm{width:26px;padding:0;font-size:15px;font-weight:700}
+.ll-zoom .ll-zpm:disabled{opacity:.4;cursor:default}
+.ll-zoom .ll-zstep{height:22px;border-radius:999px;font-size:11.5px;color:var(--muted);padding:0 9px}
+.ll-zsteps{position:absolute;top:calc(100% + 6px);right:0;z-index:40;display:flex;gap:0;padding:6px;background:var(--surface);border:1px solid var(--pop-line);
+  border-radius:9px;box-shadow:0 14px 36px var(--pop-shadow)}
+.ll-zsteps button{height:28px!important;border-radius:0!important;margin-left:-1px;min-width:48px}
+.ll-zsteps button:first-child{border-radius:7px 0 0 7px!important}.ll-zsteps button:last-child{border-radius:0 7px 7px 0!important}
+.ll-zsteps button[aria-checked="true"]{background:var(--h-input)!important;border-color:var(--h-input)!important;color:var(--on-fill)!important;font-weight:700}
 .ll-zoom output{min-width:40px;text-align:right;font-weight:700;color:var(--h-input)}
 .ll-zoom.is-zoomed output{background:var(--accent);color:var(--accent-ink);border-radius:5px;padding:1px 6px}
 .ll-zoom button{height:26px;padding:0 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--h-input);cursor:pointer;font-family:inherit;font-size:12px}

@@ -55,3 +55,16 @@ export const PROPOSALS = [
       ["insert", `<div class="zx-pop"><b>刻み（つまみが止まる間隔）</b>${SEG}<small style="color:var(--muted)">↑↓ キー・ホイールでも刻みずつ動きます</small></div>`, "beforeend", "#llZoom"]],
   },
 ];
+
+// ---- 2 回目（Z3 74.0 と Z1 71.0 が僅差 → 複合案 3 つ＋上位 2 案）----
+const PM = [["insert", '<button class="zx-pm" title="10% 小さく">−</button>', "beforebegin", ".zx-track"], ["insert", '<button class="zx-pm" title="10% 大きく">＋</button>', "afterend", ".zx-track"]];
+const PMCSS = `.zx-pm{width:26px!important;padding:0!important;font-size:15px!important;font-weight:700}`;
+PROPOSALS.push(
+  { key: "V1", name: "−・＋ ＋ 値の右に「刻み 10% ▾」", css: BASE + PMCSS + `.zx-step{height:24px!important;font-size:11.5px!important;color:var(--muted)!important}`,
+    ops: [["script", TICKS], ...PM, ["insert", '<select class="zx-step" aria-label="刻み"><option>刻み 5%</option><option selected>刻み 10%</option><option>刻み 20%</option><option>刻み 25%</option></select>', "afterend", "#llZoomValue"]] },
+  { key: "V2", name: "−・＋ ＋ 「10%刻み ▾」の札（押すと刻みを選ぶ）", css: BASE + PMCSS + `.zx-chip{height:22px!important;border-radius:999px!important;font-size:11px!important;color:var(--muted)!important}`,
+    ops: [["script", TICKS], ...PM, ["insert", '<button class="zx-chip" title="押すと刻みを選べます">10%刻み ▾</button>', "afterend", "#llZoomValue"]] },
+  { key: "V3", name: "−・＋ ＋ 値を押すと刻み・倍率の小窓（開いたところ）", css: BASE + PMCSS + `#llZoomValue{cursor:pointer;border-bottom:1px dashed var(--h-input)}.zx-pop{right:110px;top:30px;width:250px}
+      .zx-quick{display:flex;gap:4px;flex-wrap:wrap}.zx-quick button{height:24px!important;padding:0 8px!important}`,
+    ops: [["script", TICKS], ...PM, ["insert", `<div class="zx-pop"><b>刻み（−・＋ とつまみが動く幅）</b>${SEG}<b>よく使う倍率</b><div class="zx-quick"><button>80%</button><button>100%</button><button>125%</button><button>150%</button><button>200%</button></div></div>`, "beforeend", "#llZoom"]] },
+);

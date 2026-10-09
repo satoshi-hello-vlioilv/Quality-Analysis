@@ -11,9 +11,9 @@ const SLICERS = [
 /** 共通: スライサーの枠を組み立てて置く。layout は値の並べ方、place は置き場 */
 const build = (layout, place, extra = "") => `
   const S = ${JSON.stringify(SLICERS)};
-  const card = (s) => '<section class="sx-card"><header><b>' + s.col + '</b>'
+  const card = (s) => '<section class="sx-card"><div class="sx-ch"><b>' + s.col + '</b>'
     + (s.values.some((v) => v[2]) ? '<span class="sx-n">' + s.values.filter((v) => v[2]).length + ' 選択</span><button class="sx-clr" title="この列の選択を外す">×</button>' : '')
-    + '</header><div class="sx-vals">' + s.values.map((v) => '<button class="sx-v' + (v[2] ? ' is-on' : '') + '"><span>' + v[0] + '</span><i>' + v[1] + '</i></button>').join('') + '</div></section>';
+    + '</div><div class="sx-vals">' + s.values.map((v) => '<button class="sx-v' + (v[2] ? ' is-on' : '') + '"><span>' + v[0] + '</span><i>' + v[1] + '</i></button>').join('') + '</div></section>';
   const head = '<div class="sx-head"><b>スライサー</b><span class="sx-place">' + ['左', '右', '上'].map((p) => '<button class="' + (p === '${place}' ? 'is-on' : '') + '">' + p + '</button>').join('') + '</span></div>';
   const pane = document.createElement('aside'); pane.className = 'sx-pane sx-${layout} sx-at-${place}';
   pane.innerHTML = head + S.map(card).join('') + '<button class="sx-add">＋ 列を足す</button>';
@@ -35,8 +35,8 @@ const BASE = `
   .sx-place button{border:0;background:var(--surface);padding:3px 10px;font-size:12px;color:var(--muted);cursor:pointer}
   .sx-place button.is-on{background:var(--h-input);color:#fff;font-weight:700}
   .sx-card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px}
-  .sx-card header{display:flex;align-items:center;gap:6px;margin-bottom:6px}
-  .sx-card header b{font-size:13px}
+  .sx-card .sx-ch{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+  .sx-card .sx-ch b{font-size:13px}
   .sx-n{margin-left:auto;font-size:11.5px;color:var(--h-input);font-weight:700}
   .sx-clr{border:1px solid var(--line);background:var(--surface);border-radius:6px;width:22px;height:22px;cursor:pointer;color:var(--muted)}
   .sx-v{display:flex;align-items:center;justify-content:space-between;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:3px 8px;font-size:12.5px;cursor:pointer;color:var(--ink)}
@@ -70,8 +70,8 @@ export const PROPOSALS = [
   {
     key: "N4", name: "左の縦帯・畳めるカード＋件数の行に選んだ値の札",
     css: BASE + `.sx-fold{width:220px}.sx-fold .sx-vals{display:flex;flex-direction:column;gap:2px}
-      .sx-fold .sx-card:not(:first-of-type) .sx-vals{display:none}.sx-fold .sx-card header::after{content:"▾";color:var(--muted);margin-left:4px}
-      .sx-fold .sx-card:not(:first-of-type) header::after{content:"▸"}
+      .sx-fold .sx-card:not(:first-of-type) .sx-vals{display:none}.sx-fold .sx-card .sx-ch::after{content:"▾";color:var(--muted);margin-left:4px}
+      .sx-fold .sx-card:not(:first-of-type) .sx-ch::after{content:"▸"}
       .sx-sum{display:inline-flex;gap:4px;align-items:center;margin-left:10px}.sx-sum i{font-style:normal;background:var(--input-soft);color:var(--h-input);border-radius:999px;padding:1px 10px;font-weight:700;font-size:12px}`,
     ops: [ENTRY, ["script", build("fold", "左", `document.querySelector('#llCount').insertAdjacentHTML('afterend', '<span class="sx-sum"><i>設備: CR1・L-1 ×</i></span>');`)]],
   },
@@ -82,3 +82,18 @@ export const PROPOSALS = [
     ops: [ENTRY, ["script", build("float", "左")]],
   },
 ];
+
+// ---- 2 回目（N4 79.5 と N1 75.0 が僅差 → 複合案 3 つ＋上位 2 案）----
+const SUM = `document.querySelector('#llCount').insertAdjacentHTML('afterend', '<span class="sx-sum"><i>設備: CR1・L-1 ×</i></span>');`;
+const BARS = `document.querySelectorAll('.sx-v').forEach((b) => { const n = +b.querySelector('i').textContent; b.style.setProperty('--w', Math.round(n / 210 * 100) + '%'); });`;
+const SUMCSS = `.sx-sum{display:inline-flex;gap:4px;align-items:center;margin-left:10px}.sx-sum i{font-style:normal;background:var(--input-soft);color:var(--h-input);border-radius:999px;padding:1px 10px;font-weight:700;font-size:12px}`;
+const BARCSS = `.sx-v{position:relative;overflow:hidden}.sx-v::before{content:"";position:absolute;left:0;top:0;bottom:0;width:var(--w,0);background:rgba(63,101,145,.10);pointer-events:none}
+  .sx-v.is-on::before{background:rgba(255,255,255,.18)}.sx-v span,.sx-v i{position:relative}`;
+const N1 = PROPOSALS.find((p) => p.key === "N1"), N4 = PROPOSALS.find((p) => p.key === "N4");
+PROPOSALS.push(
+  { key: "W1", name: "N1 ＋ 件数の行に選んだ値の札", css: N1.css + SUMCSS, ops: [ENTRY, ["script", build("list", "左", SUM)]] },
+  { key: "W2", name: "W1 ＋ 件数の帯・値を探す欄", css: N1.css + SUMCSS + BARCSS + `.sx-q{height:26px;border:1px solid var(--edit-line);border-radius:6px;background:var(--edit-field);padding:0 8px;font-size:12px;margin-bottom:4px;width:100%;box-sizing:border-box}`,
+    ops: [ENTRY, ["script", build("list", "左", SUM + BARS + `document.querySelectorAll('.sx-vals').forEach((v) => v.insertAdjacentHTML('beforebegin', '<input class="sx-q" placeholder="値を探す">'));`)]] },
+  { key: "W3", name: "N4 ＋ 件数の帯・畳んでも選んだ値を見出しに", css: N4.css + BARCSS + `.sx-pick{display:block;font-size:11.5px;color:var(--h-input);font-weight:700;margin-top:-2px}`,
+    ops: [ENTRY, ["script", build("fold", "左", SUM + BARS)]] },
+);

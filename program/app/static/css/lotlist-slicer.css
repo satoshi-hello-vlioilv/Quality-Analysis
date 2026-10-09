@@ -1,0 +1,66 @@
+/* =========================================================================
+   異常ロット一覧のスライサー（lotlist-slicer.js）
+   - 表とスライサーを 1 つの行（.ll-bodyrow）に置く。data-place で左（既定）・右・上
+   - 値は 1 行ずつ: 名前は左・件数は右に揃え、件数の帯（淡い藍）で多い・少ないを読まずに分かるように
+   - 選んだ値は藍の地に白い字。0 件（今の絞り込みでは当たらない）は淡く（押せる）
+   ========================================================================= */
+.ll-bodyrow{flex:1;min-height:0;display:flex;gap:10px;margin:0 16px 14px}
+.ll-bodyrow > .ll-grid-wrap{flex:1;min-width:0;margin:0}
+.ll-bodyrow[data-place="right"]{flex-direction:row-reverse}
+.ll-bodyrow[data-place="top"]{flex-direction:column}
+
+.sx-pane{flex:0 0 250px;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:10px;
+  background:var(--surface-2);border:1px solid var(--line);border-radius:8px;font-size:13px}
+.ll-bodyrow[data-place="top"] .sx-pane{flex:0 0 auto;max-height:260px}
+.sx-head{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.sx-head > b{font-size:13.5px;margin-right:auto}
+.sx-place{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.sx-place button{border:0;background:var(--surface);padding:0 10px;height:24px;font:inherit;font-size:12px;color:var(--muted);cursor:pointer}
+.sx-place button + button{border-left:1px solid var(--line)}
+.sx-place button[aria-checked="true"]{background:var(--h-input);color:var(--on-fill);font-weight:700}
+.sx-close{width:24px;height:24px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--muted);cursor:pointer;line-height:1}
+.sx-close:hover,.sx-place button:hover:not([aria-checked="true"]){color:var(--ink);background:var(--surface-4)}
+
+.sx-cards{display:flex;flex-direction:column;gap:10px}
+.ll-bodyrow[data-place="top"] .sx-cards{flex-direction:row;flex-wrap:wrap;align-items:flex-start}
+.ll-bodyrow[data-place="top"] .sx-card{flex:0 1 280px;max-height:200px;overflow:auto}
+.sx-card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px}
+.sx-ch{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.sx-ch > b{font-size:13px;margin-right:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sx-clr,.sx-rm{height:22px;border:1px solid var(--line);border-radius:999px;background:var(--surface);font:inherit;font-size:11.5px;padding:0 8px;cursor:pointer;white-space:nowrap}
+.sx-clr{color:var(--h-input);font-weight:700;border-color:#b9c9d6;background:var(--input-soft)}
+.sx-rm{color:var(--muted)}
+.sx-clr:hover,.sx-rm:hover{border-color:var(--h-input)}
+.sx-q{width:100%;box-sizing:border-box;height:26px;margin-bottom:5px;border:1px solid var(--edit-line);border-radius:6px;background:var(--edit-field);padding:0 8px;font:inherit;font-size:12.5px;color:var(--ink)}
+.sx-q:focus{outline:none;border-color:var(--edit-focus);box-shadow:0 0 0 3px var(--focus-ring)}
+.sx-vals{display:flex;flex-direction:column;gap:3px}
+
+.sx-v{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:26px;padding:0 8px;
+  border:1px solid var(--line);border-radius:6px;background:var(--surface);font:inherit;font-size:12.5px;color:var(--ink);cursor:pointer;text-align:left}
+.sx-v::before{content:"";position:absolute;left:0;top:0;bottom:0;width:var(--w,0);background:rgba(63,101,145,.11);pointer-events:none}
+.sx-v span,.sx-v i{position:relative}
+.sx-v span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sx-v i{font-style:normal;color:var(--muted);font-size:11.5px;font-variant-numeric:tabular-nums}
+.sx-v:hover{border-color:var(--h-input)}
+.sx-v:focus-visible{outline:2px solid var(--h-input);outline-offset:1px}
+.sx-v.is-on{background:var(--h-input);border-color:var(--h-input);color:var(--on-fill);font-weight:700}
+.sx-v.is-on::before{background:rgba(255,255,255,.18)}
+.sx-v.is-on i{color:#dbe7f3}
+.sx-v.is-zero:not(.is-on){color:#8b98a3;background:var(--surface-3)}
+.sx-v[hidden]{display:none}
+.sx-empty,.sx-wait,.sx-more{margin:0;color:var(--muted);font-size:12px;line-height:1.6}
+.sx-add{height:28px;border:1px dashed #a9bfd6;border-radius:7px;background:var(--surface);color:var(--h-input);font:inherit;font-size:12.5px;padding:0 6px;cursor:pointer}
+.ll-bodyrow[data-place="top"] .sx-add{align-self:center}
+
+/* 道具の行の入口: 開いている・選んでいるときは青緑の地と、選んでいる列の数 */
+.ll-screen .generic-filter-bar .sx-entry{display:inline-flex;align-items:center;gap:6px}
+.sx-entry svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5}
+.ll-screen .generic-filter-bar .sx-entry.is-on{background:var(--ll-pale);border-color:var(--h-xfer);color:var(--ll-teal-dark);font-weight:700}
+.sx-entry b{display:inline-grid;place-items:center;min-width:18px;height:18px;border-radius:9px;background:var(--h-xfer);color:var(--on-fill);font-size:11px}
+
+/* 件数の行の札: 何で絞っているか */
+.sx-sum{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center}
+.sx-chip{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 4px 0 10px;border-radius:999px;background:var(--input-soft);color:var(--h-input);font-size:12px;max-width:340px}
+.sx-chip b{font-weight:700}
+.sx-chip button{width:20px;height:20px;border:0;border-radius:50%;background:none;color:var(--h-input);cursor:pointer;font-size:13px;line-height:1}
+.sx-chip button:hover{background:rgba(63,101,145,.15)}
