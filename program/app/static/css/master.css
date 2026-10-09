@@ -10,7 +10,15 @@
 /* 窓の台紙（マスタ管理・フォーム・確認・更新履歴・取込ダイアログで同じ）。大きさだけを種類ごとに決める */
 .master-panel,.master-form-card{background:var(--surface);border-radius:12px;
   display:flex;flex-direction:column;box-shadow:var(--shadow);overflow:hidden}
-.master-panel{width:min(1240px,96vw);height:min(920px,92vh)}
+/* マスタ管理の窓: 左＝区分つきのナビ／中＝一覧／右＝選んだ行の詳細（参照先・利用状況・配布は中と右をまとめて使う） */
+.master-panel{width:min(1480px,96vw);height:min(920px,92vh);display:grid;grid-template-columns:200px minmax(0,1fr) 400px;
+  grid-template-rows:auto auto minmax(0,1fr)}
+.master-head{grid-column:1/-1}
+.master-tabs{grid-column:1;grid-row:2/4}
+.master-toolbar{grid-column:2/4;grid-row:2}
+.master-table-wrap{grid-column:2;grid-row:3}
+.master-detail{grid-column:3;grid-row:3}
+.master-settings{grid-column:2/4;grid-row:2/4}
 
 .master-head{padding:10px 14px 10px 20px;display:flex;justify-content:space-between;align-items:center;gap:12px;
   color:var(--on-fill);flex:0 0 auto}
@@ -22,12 +30,15 @@
   display:grid;place-items:center;flex:0 0 auto}
 .icon-btn:hover{background:rgba(255,255,255,.22)}
 
-/* タブ: 下線式（選んでいるタブだけ藍の下線と濃い字）。件数は小さな丸札 */
-.master-tabs{display:flex;gap:2px;padding:0 14px;background:var(--surface);border-bottom:1px solid var(--line);flex:0 0 auto}
-.master-tabs .tab{border:0;border-bottom:3px solid transparent;background:none;color:var(--muted);
-  padding:11px 14px 9px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:7px}
-.master-tabs .tab:hover{color:var(--ink);background:var(--surface-2)}
-.master-tabs .tab.active{color:var(--h-input);border-bottom-color:var(--h-input)}
+/* ナビ: 区分の見出し（小さな灰の字）の下に縦に並べる。選んでいる所は藍の帯と淡い地。件数は右に揃えた丸札 */
+.master-tabs{display:flex;flex-direction:column;gap:2px;padding:12px 8px;background:var(--surface-2);border-right:1px solid var(--line);overflow:auto}
+.master-tabs .mg-lab{font-size:11.5px;font-weight:700;color:var(--muted);letter-spacing:.06em;padding:12px 10px 4px}
+.master-tabs .mg-lab:first-child{padding-top:2px}
+.master-tabs .tab{border:0;border-left:3px solid transparent;border-radius:0 7px 7px 0;background:none;color:var(--ro-ink);
+  min-height:36px;padding:0 10px 0 12px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:space-between;gap:7px;text-align:left}
+.master-tabs .tab:hover{color:var(--ink);background:var(--surface-4)}
+.master-tabs .tab:focus-visible{outline:2px solid var(--h-input);outline-offset:-2px}
+.master-tabs .tab.active{color:var(--h-input);border-left-color:var(--h-input);background:var(--input-soft)}
 .master-tabs .tab .tab-count{min-width:20px;height:18px;padding:0 6px;border-radius:9px;background:var(--plain-soft);color:var(--plain-ink);
   font-size:11.5px;font-weight:700;display:inline-grid;place-items:center;font-variant-numeric:tabular-nums}
 .master-tabs .tab.active .tab-count{background:var(--input-soft);color:var(--h-input)}
@@ -55,11 +66,13 @@ table.master-table thead th{position:sticky;top:0;height:34px;background:var(--s
   font-size:12.5px;z-index:2;border-bottom:1px solid var(--line)}
 table.master-table thead th small{margin-left:4px;font-weight:600;color:#8193a4}
 table.master-table th.num,table.master-table td.num{text-align:right;font-variant-numeric:tabular-nums}
-table.master-table th.actions,table.master-table td.actions{width:92px;text-align:right;overflow:visible}
 table.master-table tbody tr{cursor:pointer;outline:none}
 table.master-table tbody tr:hover td{background:#f3f8fb}
 table.master-table tbody tr:focus-visible td{background:#eaf2f9;box-shadow:inset 0 0 0 0 transparent}
 table.master-table tbody tr:focus-visible td:first-child{box-shadow:inset 3px 0 0 var(--h-input)}
+/* 右に出している行: 藍の帯と淡い地（どの行を直しているかが一覧で分かる） */
+table.master-table tbody tr.is-sel td{background:var(--input-soft)}
+table.master-table tbody tr.is-sel td:first-child{box-shadow:inset 3px 0 0 var(--h-input)}
 .m-name{color:var(--ink);font-weight:700;letter-spacing:.02em}
 .m-chip{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:11px;font-size:12.5px;font-weight:700}
 /* 札の色は意味ごとに1つ（青＝上・部分・…／青緑＝下・メンテ／緑＝有・有効・編集可／灰／アンバー／赤／紫） */
@@ -73,16 +86,9 @@ table.master-table tbody tr:focus-visible td:first-child{box-shadow:inset 3px 0 
 .m-chip.c-op{background:var(--amber-soft);color:var(--warn-ink)}
 .m-chip.c-off{background:var(--danger-bg);color:#a33a2c}
 .m-chip.c-warn{background:var(--warn-soft);color:var(--warn-ink)}
-.m-none{color:#b4c0cb}
+.m-none{color:#76848f}
 .m-unset{color:var(--warn-ink);background:var(--amber-soft);border-radius:4px;padding:1px 6px;font-size:12px;font-weight:700}
 .m-code{font-family:Consolas,"Yu Gothic UI",monospace;font-size:12.5px;background:#f4f6f9;border:1px solid #e3e8ee;border-radius:4px;padding:1px 6px;color:#34495e}
-/* 行の操作: 目立たない印。行に乗せる・選ぶと見える。削除は乗せたときだけ赤 */
-.row-btn{width:30px;height:28px;border:1px solid transparent;background:none;color:#8193a4;border-radius:6px;
-  cursor:pointer;margin-left:2px;opacity:.55;transition:opacity .12s;display:inline-grid;place-items:center;padding:0;vertical-align:middle}
-tr:hover .row-btn,tr:focus-within .row-btn,tr:focus-visible .row-btn{opacity:1}
-.row-btn:hover{background:var(--surface-5);border-color:var(--line);color:var(--h-input)}
-.row-btn.danger:hover{background:var(--danger-bg);border-color:var(--danger-line);color:var(--danger)}
-
 .master-empty{padding:48px 20px;text-align:center;color:var(--muted);font-size:14.5px}
 
 /* ---------- 追加・編集フォーム ---------- */
@@ -108,6 +114,17 @@ tr:hover .row-btn,tr:focus-within .row-btn,tr:focus-visible .row-btn{opacity:1}
 .f-field textarea{resize:vertical;min-height:52px}
 .master-form-foot{display:flex;align-items:center;gap:8px;padding:12px 18px;border-top:1px solid var(--line);
   background:#f8fafb;flex:0 0 auto}
+/* 右の詳細（選んだ行）: 見出し・欄（長ければここだけ巻く）・保存の帯を縦に。欄は 2 列（長い欄は 1 行を使う） */
+.master-detail{display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--line);background:var(--surface-1)}
+.master-detail .master-form-head{background:var(--surface)}
+.master-detail .master-form-body{flex:1;min-height:0;align-content:start;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.master-detail .f-field{min-width:0}
+.master-detail .f-field input,.master-detail .f-field select,.master-detail .f-field textarea{width:100%;min-width:0;box-sizing:border-box}   /* 長い選択肢で欄が広がって、右へはみ出さないように */
+.master-detail .f-field:has(.f-hint){grid-column:1/-1}   /* 説明のある欄は 1 行を使う（半分の幅だと説明が細長く折り返す） */
+.master-detail .master-form-foot #masterFormSaveBtn{height:34px;padding:0 22px}
+.master-detail-empty{margin:0;padding:28px 20px;color:var(--muted);font-size:13.5px;line-height:1.7}
+.btn-ghost.danger-ghost{color:var(--danger);border-color:var(--danger-line)}
+.btn-ghost.danger-ghost:hover:not(:disabled){background:var(--danger-bg)}
 .form-error{color:var(--danger);font-size:13px;font-weight:700}
 
 @media(max-width:640px){
@@ -130,7 +147,7 @@ tr:hover .row-btn,tr:focus-within .row-btn,tr:focus-visible .row-btn{opacity:1}
 .master-place .place-btn{height:24px;padding:0 10px;border-radius:6px;border:1px solid var(--on-dark-line);
   background:var(--on-dark-fill);color:var(--on-fill);font:inherit;font-weight:700;cursor:pointer}
 .master-place .place-btn:hover{background:var(--on-dark-hover)}
-#masterAddBtn:disabled,.row-btn:disabled{opacity:.45;cursor:not-allowed}
+#masterAddBtn:disabled,.master-detail button:disabled{opacity:.45;cursor:not-allowed}
 
 /* ---------- 保存の途中経過・競合 ----------
    待ち=藍の淡い面（そのうち通る）／競合=アンバー（人が選ぶ）。相手の値と自分の値を並べて見比べる。 */
@@ -157,7 +174,7 @@ tr:hover .row-btn,tr:focus-within .row-btn,tr:focus-visible .row-btn{opacity:1}
 .ps-lead{margin:0 0 10px;font-size:13.5px;color:var(--ro-ink)}
 .ps-loading{color:var(--muted)}
 .ps-notice{margin:0 0 10px;padding:8px 12px;border-radius:8px;background:var(--amber-pale);border:1px solid var(--amber-line);color:var(--amber-ink);font-size:13px}
-.ps-card{background:var(--surface);border:1px solid var(--line);border-left:4px solid #c9d3db;border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.ps-card{background:var(--surface);border:1px solid var(--line);border-left:4px solid #c9d3db;border-radius:10px;padding:8px 14px;margin-bottom:8px}
 .ps-card.is-changed{border-left-color:var(--h-input)}
 .ps-card.is-readonly{background:var(--surface-1)}
 .ps-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -165,7 +182,9 @@ tr:hover .row-btn,tr:focus-within .row-btn,tr:focus-visible .row-btn{opacity:1}
 .ps-badge{font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:999px}
 .ps-badge.default{background:var(--surface-5);color:var(--muted)}
 .ps-badge.changed{background:#e3ecf7;color:#2c4d78}
-.ps-hint{margin:4px 0 8px;font-size:12.5px;color:var(--muted);line-height:1.6}
+.ps-hint{margin:2px 0 6px;font-size:12.5px;color:var(--muted);line-height:1.6;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.ps-card:hover .ps-hint,.ps-card:focus-within .ps-hint{-webkit-line-clamp:unset}
+.ps-row .ps-save:not(.is-dirty){background:var(--surface);color:var(--ro-ink);border:1px solid var(--line)}
 .ps-hint code,.ps-now code{font-family:Consolas,"BIZ UDGothic",monospace;font-size:12.5px;background:var(--surface-4);padding:1px 5px;border-radius:4px;word-break:break-all}
 .ps-row{display:flex;gap:8px;align-items:center}
 .ps-input{flex:1;min-width:0;height:32px;border:1px solid var(--edit-line);background:var(--edit-field);border-radius:7px;padding:0 10px;
@@ -176,7 +195,7 @@ tr:hover .row-btn,tr:focus-within .row-btn,tr:focus-visible .row-btn{opacity:1}
 .ps-check,.ps-reset,.ps-acts button{border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:0 12px;cursor:pointer;font-family:inherit;font-size:13px}
 .ps-check:hover,.ps-reset:hover:not(:disabled){border-color:var(--h-input)}
 .ps-reset:disabled{opacity:.45;cursor:default}
-.ps-now{margin-top:6px;font-size:12.5px;color:var(--muted)}
+.ps-now{margin-top:4px;font-size:12.5px;color:var(--muted)}
 .ps-result{margin-top:8px;padding:7px 10px;border-radius:7px;font-size:13px;line-height:1.6}
 .ps-result.ok{background:var(--ok-bg);color:#1f5f3d}
 .ps-result.ng{background:var(--danger-bg);color:#8c2a1f}

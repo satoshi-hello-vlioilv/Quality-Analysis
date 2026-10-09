@@ -206,6 +206,29 @@
     if (f.kind === "datetime") return `日付・時刻（${f.pattern || "yyyy/MM/dd"}）`;
     return `文字${f.prefix || f.suffix ? `（${f.prefix || ""}〜${f.suffix || ""}）` : ""}`;
   }
+  /* 段ごとの「いまの値」（設定の窓の段の見出しに出す。畳んでいても、どこを変えたかが開かずに分かる）。
+     既定のままなら set=false（札を淡くする）。一覧の「変えた列」の点も同じ言葉を使う（changes）。 */
+  const ALIGN_NAME = { left: "左", center: "中央", right: "右", follow: "データに合わせる" };
+  function stepLook(t, c) {
+    const l = get(t), a = l.aligns[c] || {}, parts = [];
+    if (l.names[c]) parts.push(`表示名「${l.names[c]}」`);
+    if (l.locks.includes(c)) parts.push(`幅 固定 ${l.widths[c] || ""}px`); else if (l.widths[c]) parts.push(`幅 ${l.widths[c]}px`);
+    if (a.data) parts.push(`揃え ${ALIGN_NAME[a.data]}`);
+    if (a.head) parts.push(`見出し ${ALIGN_NAME[a.head]}`);
+    return { text: parts.join("・") || "自動", set: parts.length > 0 };
+  }
+  function stepFx(t, c) {
+    const src = String(get(t).formulas[c] || "").trim();
+    if (isComputed(t, c)) return { text: !src ? "式を入れてください" : window.WL.formula.check(src).ok ? "式で作る列" : "式に誤り", set: true };
+    return src ? { text: "式で作り替え", set: true } : { text: "元の値のまま", set: false };
+  }
+  function stepFmt(t, c) { const s = formatSummary(get(t).formats[c]); return { text: s || "そのまま", set: !!s }; }
+  function stepRule(t, c) { const r = get(t).rules[c]; return { text: r ? `「${r}」` : "しない", set: !!r }; }
+  /** 既定から変えたこと（名前の並び）。一覧の「変えた列」の点と、その説明に使う */
+  function changes(t, c) {
+    return [["見せ方", stepLook(t, c)], ["作り方", isComputed(t, c) ? { set: false } : stepFx(t, c)], ["値の整え方", stepFmt(t, c)], ["読み替え", stepRule(t, c)]]
+      .filter(([, s]) => s.set).map(([n, s]) => `${n}（${s.text}）`);
+  }
 
   /* ================= 幅 ================= */
   function estimate(t, c, rows) {
@@ -410,6 +433,7 @@
 
   /* ================= 表示列の窓 ================= */
   let panel = null, win = null, sel = new Set(), anchor = null, focusCol = null, stateChip = "", nameQ = "";
+  let openStep = "look";   // 右で開いている段（1 つだけ。列を替えても同じ段を開いたまま。"" は全部畳む）
   function ensurePanel() {
     if (panel) return panel;
     panel = document.createElement("section");
@@ -417,8 +441,7 @@
     panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", "表示列の設定");
     panel.innerHTML = `
       <div class="lc-head" data-drag>
-        <div><small class="lc-eyebrow">一覧の見せ方</small><h3 id="lcTitle">表示列の設定</h3>
-          <p class="lc-lead">左で出す列と並びを決め、右で選んだ1列の見え方を整えます。触った結果はすぐ後ろの一覧に出ます（保存するまでは元に戻せます）。</p></div>
+        <div><small class="lc-eyebrow">一覧の見せ方</small><h3 id="lcTitle">表示列の設定</h3></div>
         <button type="button" class="lc-x" id="lcClose" title="閉じる（保存していない変更は元に戻ります）" aria-label="閉じる">×</button>
       </div>
       <div class="lc-body">
@@ -430,20 +453,20 @@
           </div>
           <div class="lc-chips" id="lcChips"></div>
           <div class="lc-listhead"><label title="いま並んでいる列をまとめて出す／隠す"><input type="checkbox" id="lcAll"></label>
-            <span>列（上下にドラッグで並べ替え・Ctrl/Shiftクリックでまとめて選ぶ）</span><span>この列の見え方（実データ1件）</span></div>
+            <span title="上下にドラッグで並べ替え。Ctrl・Shift を押しながらクリックでまとめて選ぶ">列（ドラッグで並べ替え）</span><span>表示名</span><span>見え方（実データ 1 件）</span></div>
           <ol class="lc-list" id="lcList"></ol>
         </div>
         <div class="lc-right" id="lcDetail"></div>
       </div>
-      <div class="lc-presets">
-        <label>保存した設定<select id="lcPresetSel"><option value="">（選ぶと読み込みます）</option></select></label>
-        <button type="button" id="lcPresetSave">名前を付けて登録</button>
-        <button type="button" id="lcPresetDel">削除</button>
-        <span class="lc-sp"></span>
-        <button type="button" id="lcExport">書き出し…</button>
-        <button type="button" id="lcImport">読み込み…</button>
-      </div>
       <div class="lc-foot">
+        <div class="lc-more">
+          <button type="button" id="lcMore" aria-expanded="false" aria-controls="lcPresets">保存した設定・書き出し ▾</button>
+          <div class="lc-presets" id="lcPresets" hidden>
+            <label>保存した設定<select id="lcPresetSel"><option value="">（選ぶと読み込みます）</option></select></label>
+            <div class="lc-presets-acts"><button type="button" id="lcPresetSave">名前を付けて登録</button><button type="button" id="lcPresetDel">削除</button></div>
+            <div class="lc-presets-acts"><button type="button" id="lcExport">書き出し…</button><button type="button" id="lcImport">読み込み…</button></div>
+          </div>
+        </div>
         <span id="lcCount"></span><span id="lcNote" class="lc-note"></span><span class="lc-sp"></span>
         <button type="button" id="lcReset">既定に戻す</button>
         <button type="button" id="lcSave" class="lc-primary">保存</button>
@@ -487,25 +510,25 @@
     const nCalc = all.filter((c) => isComputed(t, c)).length;
     $("#lcChips").innerHTML = [["", `すべて ${all.length}`], ["src", `元データ ${all.length - nCalc}`], ["calc", `計算・操作 ${nCalc}`], ["shown", `表示中 ${nShown}`], ["hidden", `非表示中 ${all.length - nShown}`]]
       .map(([k, txt]) => { const n = { "": all.length, src: all.length - nCalc, calc: nCalc, shown: nShown, hidden: all.length - nShown }[k];
-        return `<button type="button" class="lc-chip${stateChip === k ? " is-on" : ""}" data-chip="${k}"${k && !n ? " disabled" : ""}>${txt}</button>`; }).join("")
+        // 0 件の札は出さない（押しても何も出ない札は読む量だけ増やす）。選んでいる札は 0 件でも外せるように残す
+        return k && !n && stateChip !== k ? "" : `<button type="button" class="lc-chip${stateChip === k ? " is-on" : ""}" data-chip="${k}">${txt}</button>`; }).join("")
       + (nameQ.trim() ? `<span class="lc-q">「${esc(nameQ.trim())}」で絞り込み中（${all.length}列中${listCols().length}列）<button type="button" data-clearq>× 外す</button></span>` : "");
     const cols = listCols();
     const allBox = $("#lcAll"), shownIn = cols.filter((c) => !hidden.has(c) || c === ctx.lotColumn).length;
     allBox.checked = cols.length > 0 && shownIn === cols.length; allBox.indeterminate = shownIn > 0 && shownIn < cols.length;
     $("#lcList").innerHTML = cols.map((c) => {
       const isLot = c === ctx.lotColumn, sr = sampleRow(c), cl = sr ? cell(t, c, sr) : null, v = cl ? cl.raw : null, shown = cl ? cl.text : "";
-      const calc = isComputed(t, c);
-      const badges = (l.names[c] ? '<i class="lc-b" title="表示名を付けています">名</i>' : "")
-        + (l.formats[c] && l.formats[c].kind ? `<i class="lc-b" title="${esc(formatSummary(l.formats[c]))}">書</i>` : "")
-        + (l.rules[c] ? `<i class="lc-b is-rule" title="読み替え: ${esc(l.rules[c])}">替</i>` : "")
-        + (!calc && l.formulas[c] && String(l.formulas[c]).trim() ? '<i class="lc-b is-fx" title="作り方の式で値を作っています">式</i>' : "")
-        + (l.locks.includes(c) ? '<i class="lc-b" title="幅を固定しています">固</i>' : "");
+      const calc = isComputed(t, c), chg = changes(t, c);
       const smp = v == null ? '<em class="lc-none">（値のある行がありません）</em>'
         : (shown !== String(v) ? `<s>${esc(v)}</s> ${esc(shown)}` : esc(shown));
+      // 表示名: 選んでいる列はその場で直せる欄、ほかは付けた名前だけ（付けていなければ空ける＝読む字を増やさない）
+      const inl = focusCol === c ? `<input value="${esc(l.names[c] || "")}" placeholder="${esc(c)}" maxlength="40" aria-label="「${esc(c)}」の表示名">` : esc(l.names[c] || "");
       return `<li class="lc-row${sel.has(c) ? " is-sel" : ""}${focusCol === c ? " is-focus" : ""}${hidden.has(c) && !isLot ? " is-hidden" : ""}" data-col="${esc(c)}">`
         + `<input type="checkbox" class="lc-vis"${!hidden.has(c) || isLot ? " checked" : ""}${isLot ? ' disabled title="ロット番号の列は押して検索するので、隠せません（並びはどこへでも動かせます）"' : ""} aria-label="「${esc(label(t, c))}」を出す">`
         + '<span class="lc-grip" title="ドラッグで並べ替え">⠿</span>'
-        + `<span class="lc-name"><i class="lc-dot ${calc ? "is-calc" : "is-src"}" title="${calc ? "計算・操作（この画面で作った列）" : "元データ"}"></i>${esc(label(t, c))}${l.names[c] ? `<small>${esc(c)}</small>` : ""}${badges}</span>`
+        + `<span class="lc-name"><i class="lc-dot ${calc ? "is-calc" : "is-src"}" title="${calc ? "計算・操作（この画面で作った列）" : "元データ"}"></i>${esc(c)}`
+        + `${chg.length ? `<i class="lc-chg" title="変えたこと: ${esc(chg.join("・"))}" aria-label="変えた列"></i>` : ""}</span>`
+        + `<span class="lc-inl">${inl}</span>`
         + `<span class="lc-sample" title="${esc(v == null ? "" : v)}">${smp}</span></li>`;
     }).join("") || '<li class="lc-empty">当たる列がありません</li>';
     $("#lcCount").textContent = `${nShown} / ${all.length} 列` + (sel.size > 1 ? `／ ${sel.size}列を選択中（そのままドラッグでまとめて移動）` : "");
@@ -532,11 +555,17 @@
     const fchk = String(fsrc).trim() ? window.WL.formula.check(fsrc) : null;
     const ruleNames = window.LotListRules ? window.LotListRules.names() : [];
     const dec = f.decimals == null ? "" : String(f.decimals);
+    const nChanged = distinctRows.filter((r) => { const o = cell(t, c, r); return o.text !== o.raw; }).length;
+    const stepResult = { text: !distinctRows.length ? "値がありません" : nChanged ? `${distinctRows.length} 件中 ${nChanged} 件が変わる` : "変わりません", set: nChanged > 0 };
+    // 段: 見出しを押して開く・畳む（開くのは 1 つ）。見出しの右に今の値（変えていれば濃く）
+    const step = (key, mark, title, sum) => `<section class="lc-step${openStep === key ? " is-open" : ""}" data-step="${key}">`
+      + `<h4 role="button" tabindex="0" aria-expanded="${openStep === key}">${mark ? `<i>${mark}</i>` : ""}${title}`
+      + `<span class="lc-now${sum.set ? " is-set" : ""}">${esc(sum.text)}</span><b class="lc-chev" aria-hidden="true"></b></h4>`;
     box.innerHTML = `
       <div class="lc-card"><b>${esc(label(t, c))}</b>
         <dl><dt>${calc ? "作った列" : "元の項目名"}</dt><dd>${esc(c)}${calc ? "（表示だけの列。並べ替え・絞り込みは元のデータの列で行います）" : ""}</dd><dt>値のある行</dt><dd>${vals.length} / ${ctx.rows.length}（空欄 ${ctx.rows.length - vals.length}）</dd>
         <dt>値の種類</dt><dd>${guess}</dd>${c === ctx.lotColumn ? "<dt>この列について</dt><dd>押すとそのロットを検索します。隠せません（並びはどこへでも動かせます）。</dd>" : ""}</dl></div>
-      <section class="lc-step"><h4><i>1</i>見せ方</h4>
+      ${step("look", "1", "見せ方", stepLook(t, c))}
         <label>表示名<input id="lcName" value="${esc(l.names[c] || "")}" placeholder="${esc(c)}" maxlength="40"></label>
         <div class="lc-field"><span>幅</span>
           ${["auto", "manual", "locked"].map((k) => `<label class="lc-radio"><input type="radio" name="lcW" value="${k}"${mode === k ? " checked" : ""}>${{ auto: "自動", manual: "手で決める", locked: "固定" }[k]}</label>`).join("")}
@@ -545,14 +574,14 @@
         <div class="lc-field"><span>データの揃え</span>${[["", "自動"], ["left", "左"], ["center", "中央"], ["right", "右"]].map(([k, n]) => `<label class="lc-radio"><input type="radio" name="lcAD" value="${k}"${(a.data || "") === k ? " checked" : ""}>${n}</label>`).join("")}</div>
         <div class="lc-field"><span>見出しの揃え</span>${[["", "中央（既定）"], ["follow", "データに合わせる"], ["left", "左"], ["right", "右"]].map(([k, n]) => `<label class="lc-radio"><input type="radio" name="lcAH" value="${k}"${(a.head || "") === k ? " checked" : ""}>${n}</label>`).join("")}</div>
       </section>
-      <section class="lc-step lc-fx"><h4><i>式</i>この列の作り方${calc ? "" : "<small>（空欄なら元の値のまま）</small>"}</h4>
+      ${step("fx", "式", "この列の作り方", stepFx(t, c))}
         <textarea id="lcFormula" rows="2" spellcheck="false" placeholder="例: [製造板厚] * [幅]　／　if([数量] > 100, '大', '小')">${esc(fsrc)}</textarea>
         <small id="lcFxState" class="lc-fxstate ${fchk && !fchk.ok ? "is-ng" : "is-ok"}">${!String(fsrc).trim() ? (calc ? "式を入れてください" : "元の値をそのまま出します") : fchk.ok ? `使える式です（使っている列: ${esc(fchk.columns.join("、") || "なし")}）` : esc(fchk.error)}</small>
         ${String(fsrc).trim() && fchk && fchk.ok ? `<div class="lc-fxtry"><span>先頭3件の結果</span>${ctx.rows.slice(0, 3).map((r) => `<code>${esc(String(rawOf(t, c, r) ?? "")) || "（空欄）"}</code>`).join("")}</div>` : ""}
         <details class="lc-help"><summary>書き方</summary><table>${window.WL.formula.help.map(([a, b]) => `<tr><td><code>${esc(a)}</code></td><td>${esc(b)}</td></tr>`).join("")}</table></details>
         ${calc ? '<button type="button" id="lcDelCol" class="lc-danger">この列を削除する</button>' : ""}
       </section>
-      <section class="lc-step"><h4><i>2</i>値の整え方</h4>
+      ${step("fmt", "2", "値の整え方", stepFmt(t, c))}
         <div class="lc-field"><span>種類</span>${[["", "そのまま"], ["number", "数値"], ["datetime", "日付・時刻"], ["text", "文字"]].map(([k, n]) => `<label class="lc-radio"><input type="radio" name="lcK" value="${k}"${(f.kind || "") === k ? " checked" : ""}>${n}</label>`).join("")}</div>
         ${f.kind === "number" ? `<div class="lc-field"><span>小数桁</span><select id="lcDec"><option value="">そのまま</option>${[0, 1, 2, 3, 4, 5, 6].map((n) => `<option value="${n}"${dec === String(n) ? " selected" : ""}>${n}桁</option>`).join("")}</select>
             <label class="lc-check"><input type="checkbox" id="lcThou"${f.thousands ? " checked" : ""}>3桁ごとに区切る（1,234）</label></div>` : ""}
@@ -560,17 +589,26 @@
             <input id="lcPattern" value="${esc(f.pattern || "yyyy/MM/dd")}" maxlength="60"><small class="lc-hint">y=年 M=月 d=日 H=時 m=分 s=秒 ddd=曜日（2つ重ねると0埋め）</small></div>` : ""}
         ${f.kind && f.kind !== "datetime" ? `<div class="lc-field"><span>単位</span><input id="lcPre" value="${esc(f.prefix || "")}" maxlength="8" placeholder="前（例: ¥）"><input id="lcSuf" value="${esc(f.suffix || "")}" maxlength="8" placeholder="後（例: mm）"></div>` : ""}
       </section>
-      <section class="lc-step"><h4><i>3</i>読み替え</h4>
+      ${step("rule", "3", "読み替え", stepRule(t, c))}
         <div class="lc-field"><span>ルール</span><select id="lcRule"><option value="">しない</option>${ruleNames.map((n) => `<option value="${esc(n)}"${l.rules[c] === n ? " selected" : ""}>${esc(n)}</option>`).join("")}<option value="__new">＋ 新しいルールを作る…</option></select>
           <button type="button" id="lcRuleEdit"${l.rules[c] ? "" : " disabled"}>ルールを編集</button></div>
         <small class="lc-hint">読み替えが当たった行はその言葉で確定し、当たらなければ書式で整形します。どちらもできない値は元のまま表示します。</small>
       </section>
-      <section class="lc-step lc-result"><h4>結果</h4>
+      ${step("result", "", "結果", stepResult)}
         ${distinctRows.length ? `<table><tr><th>元の値</th><th></th><th>一覧に出る値</th></tr>${distinctRows.map((r) => { const o = cell(t, c, r); return `<tr><td>${esc(o.raw)}</td><td>→</td><td class="${o.color ? "cell-" + o.color : ""}">${o.text === o.raw ? `${esc(o.text)} <small>変わりません</small>` : esc(o.text)}</td></tr>`; }).join("")}</table>` : '<p class="lc-empty">値のある行がありません</p>'}
       </section>`;
     const setL = (p) => { stage(t, p); ctx.rerender(); renderPanel(); };
     const setF = (p) => { const F = Object.assign({}, get(t).formats); F[c] = Object.assign({}, F[c] || {}, p); if (!F[c].kind) delete F[c]; setL({ formats: F }); };
-    $("#lcName").addEventListener("change", (e) => { const N = Object.assign({}, get(t).names); const v = e.target.value.trim(); if (v && v !== c) N[c] = v; else delete N[c]; setL({ names: N }); });
+    $("#lcName").addEventListener("change", (e) => setName(c, e.target.value));
+    // 段を開く・畳む（描き直さずに印だけ替える＝押した手応えがすぐ返る）
+    $$(".lc-step > h4", box).forEach((h) => {
+      const flip = () => {
+        const key = h.parentElement.dataset.step; openStep = openStep === key ? "" : key;
+        $$(".lc-step", box).forEach((sct) => { const on = sct.dataset.step === openStep; sct.classList.toggle("is-open", on); $("h4", sct).setAttribute("aria-expanded", on); });
+      };
+      h.addEventListener("click", flip);
+      h.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); } });
+    });
     $$("input[name=lcW]", box).forEach((r) => r.addEventListener("change", () => {
       const L = get(t), W = Object.assign({}, L.widths); let locks = L.locks.filter((k) => k !== c);
       if (r.value === "auto") delete W[c];
@@ -623,6 +661,12 @@
     });
     $("#lcRuleEdit").addEventListener("click", () => { if (get(t).rules[c]) openRule(get(t).rules[c]); });
   }
+  /** 列 c の表示名を v にする（空・元の名前と同じなら外す）。右の詳細と左の一覧の欄の両方から */
+  function setName(c, v) {
+    const t = ctx.target, N = Object.assign({}, get(t).names), name = String(v).trim().slice(0, 40);
+    if (name && name !== c) N[c] = name; else delete N[c];
+    stage(t, { names: N }); ctx.rerender(); renderPanel();
+  }
   /* 読み替えの窓へ渡す「いまの一覧」（列・行・この列の見え方）。一覧のセルと同じ道で試す。 */
   function ruleSource() {
     const t = ctx.target;
@@ -637,7 +681,15 @@
   }
   function bindPanel() {
     $("#lcClose").onclick = () => closePanel();
-    panel.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closePanel(); } });
+    const more = $("#lcMore"), pop = $("#lcPresets");
+    const showMore = (on) => { pop.hidden = !on; more.setAttribute("aria-expanded", on); if (on) requestAnimationFrame(() => $("#lcPresetSel").focus()); };
+    more.onclick = () => showMore(pop.hidden);
+    panel.addEventListener("mousedown", (e) => { if (!pop.hidden && !e.target.closest(".lc-more")) showMore(false); });
+    panel.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault(); e.stopPropagation();
+      if (!pop.hidden) { showMore(false); more.focus(); } else closePanel();   // Esc は内側から 1 段ずつ
+    });
     $("#lcFilter").addEventListener("input", (e) => { nameQ = e.target.value; renderPanel(); });
     $("#lcChips").addEventListener("click", (e) => {
       const b = e.target.closest("[data-chip]"); if (b) { stateChip = stateChip === b.dataset.chip ? "" : b.dataset.chip; renderPanel(); }
@@ -658,7 +710,7 @@
       const order = ordered(t, ctx.columns, ctx.lotColumn);
       order.splice(after ? order.indexOf(after) + 1 : order.length, 0, name);
       stage(t, { formulas: Object.assign({}, L.formulas, { [name]: "" }), order });
-      focusCol = name; ctx.rerender(); renderPanel();
+      focusCol = name; openStep = "fx"; ctx.rerender(); renderPanel();
       requestAnimationFrame(() => $("#lcFormula")?.focus());
     };
     $("#lcFitAll").onclick = () => {
@@ -668,7 +720,9 @@
       $("#lcNote").textContent = `${n}列の幅を内容に合わせました（保存するまでは元に戻せます）`;
     };
     const list = $("#lcList");
+    list.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.closest(".lc-inl input")) { e.preventDefault(); e.target.blur(); } });
     list.addEventListener("change", (e) => {
+      const nm = e.target.closest(".lc-inl input"); if (nm) { setName(nm.closest("li").dataset.col, nm.value); return; }
       const cb = e.target.closest(".lc-vis"); if (!cb) return;
       const t = ctx.target, c = cb.closest("li").dataset.col, H = new Set(get(t).hidden);
       if (cb.checked) H.delete(c); else H.add(c);

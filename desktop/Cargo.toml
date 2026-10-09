@@ -1,6 +1,6 @@
 [package]
 name = "defect-analyzer-desktop"
-version = "3.13.0"
+version = "3.14.0"
 description = "Defect-Analyzer（転写距離・ピッチ解析）デスクトップ版の窓"
 edition = "2021"
 rust-version = "1.90"
