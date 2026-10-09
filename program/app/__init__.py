@@ -70,6 +70,8 @@ def create_app(test_config=None):
     # 利用状況の置き場: マスタの共有フォルダの下（無ければこの PC の中だけ）。WaveLog の presence とは分ける
     _st = app.config["MASTER_STORE"]
     presence.configure(_st.share_dir / "presence_tpa" if _st.share_dir else _st.cache_dir.parent / "presence")
+    # 置き場を変えた・ほかの PC が変えた置き場へ移ったら、利用状況の置き場も新しい置き場の下へ
+    _st.on_moved = lambda d: presence.configure(Path(d) / "presence_tpa")
     # 起動したときの参照先（ロット一覧）。参照先マスタがこれから変わったら、ロット一覧の問い合わせで切り替える
     app.config["LOT_APPLIED"] = lot_list_params(effective_settings(app))
     if "LOT_MIRROR" not in app.config:

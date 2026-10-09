@@ -39,6 +39,10 @@ from ..fsio import retrying, write_json_atomic
 log = logging.getLogger("transfer-app")
 
 LOCK_FILENAME = "master.lock.json"
+MOVED_FILENAME = "_MOVED.json"        # 置き場を変えたとき、前の置き場に置く引っ越し先の印（{to, at, by}）。ほかの PC がたどる
+OVERRIDE_FILENAME = "master_share.json"   # この PC が使う置き場（設定ファイルの master_share.dir より先。作業場所に置く）
+MOVED_HOPS = 5                        # 引っ越し先を何回までたどるか（印が輪になっていても止まる）
+HISTORY_KEEP = 10                     # この PC が覚えておく、前の置き場の数
 LOCK_TRIES = 5                  # 錠を取る試み（外された直後・切れた錠をどけた直後に取り直す回数）
 LOCK_MOVE_BUDGET_SEC = 0.5      # 錠をどける（名前を変える）のを、Windows でほかが開いている間に待つ長さ
 LOCK_TTL_DEFAULT = 20.0
@@ -171,6 +175,17 @@ class MasterStore:
         self.refresh_sec = float(cfg.get("refresh_seconds", REFRESH_DEFAULT))
         root = Path(local_root) if local_root else app_env.local_root()
         self.cache_dir = root / "master_cache"
+        # この PC が覚えた置き場（画面で変えた・引っ越し先をたどった）があれば、設定ファイルの値より先に使う
+        self.override_path = root / OVERRIDE_FILENAME
+        self.configured_dir = self.share_dir
+        try:
+            ov = str(_read_json(self.override_path).get("dir") or "").strip()
+            if ov:
+                self.share_dir = Path(ov)
+        except (OSError, ValueError, AttributeError):
+            pass
+        self.on_moved = None          # 置き場が変わったときに呼ぶ（利用状況の置き場を合わせる。app が入れる）
+        self._moved_checked = 0.0
         self.who = who or identity()
         self._write_lock = threading.RLock()   # この PC の中で書き込みを1本にまとめる
         self._state_lock = threading.Lock()
@@ -227,8 +242,71 @@ class MasterStore:
         self._mem[key] = (sig, doc)
         return doc
 
+    # ---------------------------------------------------------- 置き場を変える（services/master_place.py）
+    def retarget(self, new_dir, persist=True):
+        """置き場を new_dir に切り替える（写しは次に読むときに新しい置き場から取り直す）。persist ならこの PC に覚える。"""
+        with self._write_lock, self._state_lock:
+            before = self.share_dir
+            self.share_dir = Path(new_dir)
+            self._checked.clear()
+            self._share_sig.clear()
+            self._mem.clear()
+            self._last_error = ""
+        if persist:
+            hist = [{"dir": str(before or ""), "until": _iso(_now()), "by": dict(self.who)}] + self.history()
+            _write_json_atomic(self.override_path, {"dir": str(new_dir), "at": _iso(_now()), "by": dict(self.who),
+                                                    "history": hist[:HISTORY_KEEP]})
+        log.info("MASTER_RETARGET dir=%s", new_dir)
+        if self.on_moved:
+            self.on_moved(Path(new_dir))
+
+    def history(self):
+        """この PC が前に使っていた置き場（新しい順）→ [{dir（空なら手元のみ）, until, by}]。前の置き場のマスタは消していない。"""
+        try:
+            h = _read_json(self.override_path).get("history")
+        except (OSError, ValueError, AttributeError):
+            return []
+        return [x for x in h if isinstance(x, dict)] if isinstance(h, list) else []
+
+    def moved_to(self, folder=None):
+        """その置き場に引っ越し先の印があれば → {to, at, by}。無ければ None。"""
+        folder = Path(folder) if folder else self.share_dir
+        if not folder:
+            return None
+        try:
+            d = _read_json(folder / MOVED_FILENAME)
+            return d if isinstance(d, dict) and str(d.get("to") or "").strip() else None
+        except (OSError, ValueError):
+            return None
+
+    def follow_moved(self, force=False):
+        """いまの置き場に引っ越し先の印があり、引っ越し先に届けば、そちらへ移る（ほかの PC が置き場を変えたとき）。
+        数秒に 1 回だけ見る。移ったら True。"""
+        now = time.monotonic()
+        if not self.share_dir or (not force and now - self._moved_checked < self.refresh_sec):
+            return False
+        self._moved_checked = now
+        cur, hops = self.share_dir, 0
+        while hops < MOVED_HOPS:
+            m = self.moved_to(cur)
+            if not m:
+                break
+            nxt = Path(str(m["to"]).strip())
+            if not nxt.is_dir() or str(nxt) == str(cur):
+                break
+            cur, hops = nxt, hops + 1
+        if hops == 0:
+            return False
+        log.info("MASTER_FOLLOW_MOVED from=%s to=%s", self.share_dir, cur)
+        self.retarget(cur)
+        return True
+
     def _maybe_refresh(self, name, force=False):
         """共有が変わっていれば写しを取り直す。**数秒に1回だけ**共有を見る。失敗しても投げない。"""
+        try:
+            self.follow_moved()
+        except Exception as e:  # 印を読めなくても、いまの置き場で続ける
+            log.warning("MASTER_FOLLOW_MOVED failed: %s", e)
         now = time.monotonic()
         with self._state_lock:
             last = self._checked.get(name)
@@ -427,6 +505,7 @@ class MasterStore:
     def status(self, names=("equipment_master", "roll_master", "path_settings", "access_permissions")):
         shared = self.share_dir is not None
         out = {"mode": "shared" if shared else "local", "dir": str(self.share_dir) if shared else "",
+               "configured": str(self.configured_dir or ""), "override": self.override_path.exists(),
                "who": dict(self.who), "masters": {}}
         if shared:
             for n in names:

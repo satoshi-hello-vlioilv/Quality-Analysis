@@ -87,6 +87,9 @@ const MASTER_DEFS = {
 
 /* 参照先（読みに行く場所）。表ではなくカードで出す特別なタブ（custom）。中身は /api/settings の items */
 MASTER_DEFS.paths = { name: "path_settings", label: "参照先", group: "つなぎ先", api: "/api/settings", custom: true, admin: true };
+/* マスタの置き場（共有フォルダ）。見るのはだれでも、変えるのは開発者・メンテナンス者（サーバーの門番 _release_place_gate）。
+   ナビの項目には、頁を開かなくても分かるように今の状態の札（手元・共有・届かない）を添える。 */
+MASTER_DEFS.place = { name: "master_place", label: "マスタの置き場", group: "管理", api: "/api/masters/place", custom: true, render: () => renderMasterPlace() };
 /* アクセス権限（管理のマスタ）。判定はサーバー（services/access.py）の1箇所。画面は選択欄と印を出すだけ。 */
 MASTER_DEFS.access = {
   name: "access_permissions", label: "アクセス権限", group: "管理", api: "/api/masters/access", idField: "ログインID", admin: true,
@@ -250,10 +253,14 @@ function paintPlace(news) {
     const by = cur.updated_by && (cur.updated_by.pc || cur.updated_by.login)
       ? `・最終更新 ${escapeHtml(whoText(cur.updated_by))} ${hhmm(cur.updated_at)}` : "";
     html = `<span class="place-tag shared">共有</span><span class="place-dir">${escapeHtml(p.dir)}</span>
-      <span class="place-meta">版 ${cur.revision ?? "-"}${by}</span>`;
+      ${cur.revision != null ? `<span class="place-meta">版 ${cur.revision}${by}</span>` : ""}`;
   }
+  html += '<button type="button" class="place-btn place-go" id="masterPlaceGo" title="マスタの置き場（共有フォルダ）を見る・変える">置き場を変える ›</button>';
   if (news && news.length) html += `<span class="place-news">${news.map(escapeHtml).join(" ／ ")}</span>`;
   el.innerHTML = html;
+  const go = $("#masterPlaceGo");
+  if (go) { go.onclick = () => goTab("place"); go.hidden = mstate.tab === "place"; }
+  paintPlaceNav();
   const retry = $("#masterPlaceRetry");
   if (retry) retry.onclick = refreshPlace;
   const down = shareDown(), ro = !canWrite(mstate.tab);
@@ -275,19 +282,34 @@ function buildMasterTabs() {
   tabs.innerHTML = Object.keys(MASTER_DEFS).filter(tabVisible).map((k) => {
     const def = MASTER_DEFS[k];
     const rows = mstate.data[k];
-    const count = rows && !def.custom ? `<span class="tab-count">${rows.length}</span>` : "";
+    const count = k === "place" ? '<span class="tab-state"></span>' : rows && !def.custom ? `<span class="tab-count">${rows.length}</span>` : "";
     const head = def.group !== group ? `<span class="mg-lab">${(group = def.group)}</span>` : "";
     return `${head}<button class="tab${k === mstate.tab ? " active" : ""}" data-tab="${k}" role="tab" aria-selected="${k === mstate.tab}">${def.label}${count}</button>`;
   }).join("");
-  tabs.querySelectorAll(".tab").forEach((b) => b.onclick = () => {
-    if (b.dataset.tab === mstate.tab || !leaveOk()) return;
-    mstate.tab = b.dataset.tab;
-    mstate.editing = null; mstate.selId = null;   // 行の番号はマスタごとなので、移ったら先頭から
-    mstate.search = "";
-    $("#masterSearch").value = "";
-    buildMasterTabs();
-    ensureTabLoaded(mstate.tab).then(renderMasterTable);
-  });
+  tabs.querySelectorAll(".tab").forEach((b) => b.onclick = () => goTab(b.dataset.tab));
+  paintPlaceNav();
+}
+function goTab(tab) {
+  if (tab === mstate.tab || !leaveOk()) return;
+  mstate.tab = tab;
+  mstate.editing = null; mstate.selId = null;   // 行の番号はマスタごとなので、移ったら先頭から
+  mstate.search = "";
+  $("#masterSearch").value = "";
+  buildMasterTabs();
+  ensureTabLoaded(mstate.tab).then(renderMasterTable);
+}
+/* 置き場の今の状態 → [札の文字, 色の cls, 説明]。見出しの帯・ナビ・置き場の頁で同じ言葉を使う */
+function placeState(p) {
+  if (!p || p.mode !== "shared") return ["手元のみ", "local", "アプリの data/ に保存しています。ほかの PC とは共有していません。共有するときは、下で共有フォルダを選びます。"];
+  if (p.reachable === false) return ["届かない", "off", "共有の置き場に届きません。前に取り込んだ写しを表示中で、届くまで保存できません。"];
+  return ["共有", "shared", "共有フォルダに置き、全員の PC で同じマスタを使っています。"];
+}
+function paintPlaceNav() {
+  const el = document.querySelector('#masterTabs [data-tab="place"] .tab-state');
+  if (!el || !mstate.place) return;
+  const [t, cls] = placeState(mstate.place);
+  el.className = `tab-state ${cls}`;
+  el.textContent = t === "手元のみ" ? "手元" : t;
 }
 
 async function ensureTabLoaded(tab) {
@@ -414,7 +436,7 @@ function renderMasterTable() {
   $("#masterDetail").classList.toggle("hidden", custom);
   $("#masterSettings").classList.toggle("hidden", !custom);
   clearInterval(mstate.presenceTimer);
-  if (custom) { (def.render || renderSettings)(); return; }
+  if (custom) { (def.render || renderSettings)(); const go = $("#masterPlaceGo"); if (go) go.hidden = mstate.tab === "place"; return; }
   const rows = filteredRows(mstate.tab);
   $("#masterSearch").placeholder = def.searchPlaceholder || "検索";
   const widths = columnWidths(def, mstate.data[mstate.tab] || []);
@@ -811,6 +833,98 @@ async function moveReleasePlace(d, a, pl, say) {
   releaseNotice("ok", `✓ 配布の置き場を ${r.data.dest} に変えました。全員の PC が次に確かめたときから、新しい置き場を見ます。`
     + "\n新しい PC へ渡すアドレスも変わりました（下の「アドレスをコピー」で写し直してください）。"
     + (r.data.started ? `\n前の置き場（${d.found}）は残しています。要らなければ、全員がそろったあとで手で消してください。` : ""));
+}
+/* ---------------- マスタの置き場（共有フォルダ）を変える（services/master_place.py） ----------------
+   頁は上から「いまの置き場」→「置き場を変える」→「これまでの置き場」。形は配布の置き場を変えると同じ（上のフォルダ＋名前・木・確かめる）。
+   変える: いまのマスタを新しい場所へ写してから、この PC を切り替える。ほかの PC は前の置き場の印（_MOVED.json）をたどって移る。 */
+async function renderMasterPlace() {
+  const box = $("#masterSettings");
+  const r = await masterRequest("/api/masters/place", { cache: "no-store" });
+  if (mstate.tab !== "place") return;
+  if (!r.ok) { box.innerHTML = `<p class="ps-loading">置き場を読めませんでした: ${escapeHtml(r.data.error || "")}</p>`; return; }
+  const d = r.data, [tag, cls, what] = placeState(d), shared = d.mode === "shared";
+  const where = shared ? `<code>${escapeHtml(d.dir)}</code>` : "<b>この PC の中だけ</b>";
+  const from = !shared ? "" : d.override ? "この PC で選んだ置き場です（設定ファイルより先に使います）。" : "設定ファイル（master_share.dir）で決めた置き場です。";
+  const hist = (d.history || []).map((h) => `<li><span>${h.dir ? `<code>${escapeHtml(h.dir)}</code>` : "この PC の中だけ（手元のみ）"}</span>
+    <small>${escapeHtml(stamp(h.until) || "")} まで${h.by && (h.by.pc || h.by.login) ? `・${escapeHtml(whoText(h.by))} が変えた` : ""}</small></li>`).join("");
+  box.innerHTML = `<section class="mp-page">
+    <div class="mp-now"><span class="mp-tag ${cls}">${tag}</span><div><div class="mp-where">${where}</div><small>${escapeHtml(what)}${from ? " " + escapeHtml(from) : ""}</small></div></div>
+    <div class="mp-sec"><h3>置き場を変える</h3>${d.canChange ? '<div class="dz-place mp-form" id="mpForm"></div>'
+      : `<p class="mp-why">${escapeHtml(d.why || "この PC では置き場を変えられません。")}<br>変えるときは、開発者・メンテナンス者の PC から変えてください。</p>`}</div>
+    <div class="mp-sec"><h3>これまでの置き場</h3><small class="mp-sub">前の置き場のマスタは消さずに残しています。戻すときは、上で前の置き場を選ぶと写さずに切り替わります。</small>
+      ${hist ? `<ul class="mp-hist">${hist}</ul>` : '<p class="mp-none">まだ変えていません。</p>'}</div>
+  </section>`;
+  if (d.canChange) openMasterPlaceForm(d);
+}
+function openMasterPlaceForm(d) {
+  const form = $("#mpForm"), cur = d.mode === "shared" ? d.dir : "";
+  const [parent, name] = cur ? splitPath(cur) : ["", "Masters"], sep = cur.includes("/") && !cur.includes("\\") ? "/" : "\\";
+  form.innerHTML = `<div class="dz-pl-head"><small>${cur ? "いまの置き場から始めています。変えたい所だけ直してください。"
+      : "共有フォルダ（全員の PC から届く所）と、マスタを入れるフォルダの名前を決めます。"}</small></div>
+    <div class="dz-pl-grid">
+      <label class="dz-pl-f">置く場所（上のフォルダ）<input id="mpParent" class="ps-input" value="${escapeHtml(parent)}" placeholder="例: \\\\サーバー\\共有\\検査データ" spellcheck="false" autocomplete="off"></label>
+      <span class="dz-pl-sep" aria-hidden="true">${escapeHtml(sep)}</span>
+      <label class="dz-pl-f">フォルダの名前<input id="mpName" class="ps-input" value="${escapeHtml(name)}" spellcheck="false" autocomplete="off" maxlength="120"></label>
+    </div>
+    <div class="dz-tree" id="mpTree" aria-label="変えたあとのフォルダの形"></div>
+    <div class="dz-pl-state" id="mpState" aria-live="polite"></div>
+    <div class="dz-pl-acts"><button type="button" class="btn-primary" id="mpGo" disabled>写して、この置き場に変える</button></div>`;
+  const say = (c, html) => { const st = $("#mpState"); st.className = `dz-pl-state ${c}`; st.innerHTML = html; };
+  const args = () => ({ parent: $("#mpParent").value, name: $("#mpName").value });
+  let seq = 0, timer = null, last = null;
+  const check = async () => {
+    const a = args(), my = ++seq;
+    if (!a.parent.trim()) { last = null; $("#mpGo").disabled = true; $("#mpTree").innerHTML = ""; say("", "置く場所（上のフォルダ）を入れると、変えられるかを確かめます。"); return; }
+    const dest = `${a.parent.trim().replace(/^"|"$/g, "").replace(/[\\/]+$/, "")}${sep}${a.name.trim()}`;
+    if (cur && dest.toLowerCase() === cur.toLowerCase()) {
+      last = null; $("#mpGo").disabled = true; $("#mpTree").innerHTML = "";
+      say("", "いまの置き場です。変えるときは、置く場所かフォルダの名前を直してください。"); return;
+    }
+    say("wait", "確かめています…");
+    const r = await masterRequest("/api/masters/place/check", TPA.json("POST", a));
+    if (my !== seq) return;               // 打ち続けているあいだの古い答えは捨てる
+    last = r.data || {};
+    $("#mpTree").innerHTML = masterPlaceTree(cur, a, last, sep);
+    const go = $("#mpGo");
+    go.disabled = !last.ok;
+    go.textContent = last.mode === "switch" ? "この置き場に切り替える" : "写して、この置き場に変える";
+    if (!last.ok) say("ng", "✕ " + escapeHtml(last.problem || last.error || "変えられません。"));
+    else say("ok", "✓ " + escapeHtml(last.note || "") + "<small>変えたあと、ほかの PC はマスタを読みに行くついでに（数秒ごと）新しい置き場へ移ります。前の置き場のマスタは消しません。</small>");
+  };
+  const later = () => { clearTimeout(timer); timer = setTimeout(check, 350); };
+  $("#mpParent").addEventListener("input", later);
+  $("#mpName").addEventListener("input", later);
+  $("#mpGo").onclick = () => { if (last && last.ok) moveMasterPlace(cur, args(), last, say); };
+  check();
+}
+/* 変えたあとのフォルダの形。いまの置き場は灰（残す）、新しい置き場は藍（写す／切り替えるだけ）、使えないときは赤 */
+function masterPlaceTree(cur, a, pl, sep) {
+  const clean = (x) => String(x || "").trim().replace(/^"|"$/g, "").replace(/[\\/]+$/, "");
+  const [curParent, curName] = cur ? splitPath(cur) : ["", ""], newParent = clean(a.parent), newName = String(a.name || "").trim() || "（名前）";
+  const same = curParent && curParent.toLowerCase() === newParent.toLowerCase();
+  const mode = !pl.ok ? ["is-ng", "使えません"] : pl.mode === "switch" ? ["is-switch", "← 既にマスタがある（写さずに切り替える）"]
+    : ["is-copy", `← ${cur ? "いまの置き場" : "この PC"}のマスタを写す（${pl.files} ファイル・${Math.max(1, Math.round((pl.bytes || 0) / 1024))} KB）`];
+  const oldLi = cur ? `<li class="dz-t-old">📁 ${escapeHtml(curName)}<em>いまの置き場・消さずに残す</em></li>` : "";
+  const newLi = `<li class="dz-t-new ${mode[0]}">📁 <b>${escapeHtml(newName)}</b><em>${escapeHtml(mode[1])}</em></li>`;
+  const root = (path, items) => `<ul class="dz-t-root"><li>📁 ${escapeHtml(path || "（場所）")}<ul>${items}</ul></li></ul>`;
+  return same ? root(newParent, oldLi + newLi) : (cur ? root(curParent, oldLi) : "") + root(newParent, newLi);
+}
+async function moveMasterPlace(cur, a, pl, say) {
+  const what = pl.mode === "switch" ? `新しい置き場（${pl.dest}）に切り替えます。その置き場にあるマスタを使います。`
+    : `${cur ? `いまの置き場（${cur}）` : "この PC"}のマスタを写して、新しい置き場（${pl.dest}）に変えます。\n写すもの: ${pl.files} ファイル（前の置き場は消さずに残します）`;
+  if (!confirm(`${what}\n\nこの PC はすぐに、ほかの PC はマスタを読みに行くついでに（数秒ごと）新しい置き場を見ます。よろしいですか？`)) return;
+  const go = $("#mpGo"); go.disabled = true;
+  say("wait", pl.mode === "switch" ? "切り替えています…" : "写しています…");
+  const r = await masterRequest("/api/masters/place/move", TPA.json("POST", a));
+  if (!r.ok) { say("ng", "✕ " + escapeHtml(r.data.error || "変えられませんでした。")); go.disabled = false; return; }
+  Object.keys(mstate.data).forEach((k) => { mstate.data[k] = null; });   // マスタは新しい置き場から読み直す
+  mstate.loadedRev = {};
+  await refreshPlace();
+  buildMasterTabs();
+  await renderMasterPlace();
+  const done = `✓ マスタの置き場を ${r.data.dest} に変えました。` + (r.data.warning ? `\n${r.data.warning}` : "");
+  $("#mpState")?.insertAdjacentHTML("beforebegin", `<div class="ps-result ${r.data.warning ? "wait" : "ok"}" style="white-space:pre-line">${escapeHtml(done)}</div>`);
+  emit("tpa:settings-changed", { key: "master_place" });
 }
 const cmpVer = (a, b) => { const x = a.split(".").map(Number), y = b.split(".").map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 function paintReleaseProgress() {
