@@ -427,11 +427,13 @@
   inp.dataset.fxSuggest='1';
   inp.setAttribute('autocomplete','off');
   const o=opt||{};
-  inp.addEventListener('input',()=>sgShow(inp,o));
+  /* 日本語入力の変換中は候補を出さず、確定してから出す（変換中に候補を動かすと、確定の Enter で候補を選んでしまう） */
+  inp.addEventListener('input',e=>{if(!window.TPA||!TPA.composing(e))sgShow(inp,o)});
+  inp.addEventListener('compositionend',()=>sgShow(inp,o));
   inp.addEventListener('click',()=>sgShow(inp,o));
   inp.addEventListener('blur',()=>setTimeout(()=>{if(sgFor===inp&&document.activeElement!==inp)sgClose()},0));
   inp.addEventListener('keydown',e=>{
-   if(sgFor!==inp||!sgEl||sgEl.hidden)return;
+   if(sgFor!==inp||!sgEl||sgEl.hidden||e.isComposing||e.keyCode===229)return;
    if(e.key==='ArrowDown'||e.key==='ArrowUp'){
     e.preventDefault();sgAt=(sgAt+(e.key==='ArrowDown'?1:-1)+sgItems.length)%sgItems.length;sgMark();
    }else if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();sgPick(sgAt)}

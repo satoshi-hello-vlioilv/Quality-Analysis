@@ -42,7 +42,12 @@ const ALLOWED_OPS: &[&str] = &[
     "within_weeks",
     "within_months",
     "within_years",
+    // スライサー: 選んだ値のどれか（slice_key で比べる。空欄も選べる）
+    "in",
 ];
+/// スライサーで一度に選べる値の数・並べる値の数（Python の MAX_IN_VALUES・MAX_SLICER_VALUES と同じ）
+const MAX_IN_VALUES: usize = 1000;
+const MAX_SLICER_VALUES: usize = 1000;
 const ROWID_NAMES: &[&str] = &["rowid", "_rowid_", "oid"];
 
 /// 画面が送る問い合わせ文字（/api/lotlist の引数）。無い物は None。
@@ -295,6 +300,8 @@ pub struct Filter {
     pub column: String,
     pub op: String,
     pub value: String,
+    /// in のときだけ: 値をまとめる形（slice_key_kind）
+    pub key: String,
 }
 
 fn safe_filters(text: &str, cs: &[String]) -> Vec<Filter> {
@@ -307,10 +314,42 @@ fn safe_filters(text: &str, cs: &[String]) -> Vec<Filter> {
         let Value::Object(it) = it else { continue };
         let (column, op, value) = (field(it, "column", ""), field(it, "op", "contains"), field(it, "value", ""));
         if cs.contains(&column) && ALLOWED_OPS.contains(&op.as_str()) {
-            out.push(Filter { column, op, value });
+            let key = if op == "in" { slice_key_kind(&it.get("key").map(json_str).unwrap_or_default()) } else { String::new() };
+            out.push(Filter { column, op, value, key });
         }
     }
     out
+}
+
+/// スライサーで値をまとめる形: 日付だけ・年月・年。ほかは ""（Python の slice_key_kind と同じ）。
+fn slice_key_kind(v: &str) -> String {
+    let k = sort_key_kind(v);
+    if ["date", "month", "year"].contains(&k.as_str()) {
+        k
+    } else {
+        String::new()
+    }
+}
+
+/// スライサーの値（見えている値）の式（Python の slice_key と同じ）。前後の空白を除き、空は NULL。
+fn slice_key(col: &str, key: &str) -> String {
+    let q = qi(col);
+    let plain = format!("NULLIF(TRIM(CStr({q})), '')");
+    let head = match key {
+        "date" => format!("ToDate({q})"),
+        "month" => format!("SUBSTR(ToDate({q}), 1, 7)"),
+        "year" => format!("SUBSTR(ToDate({q}), 1, 4)"),
+        _ => return plain,
+    };
+    format!("COALESCE({head}, {plain})")
+}
+
+/// in の値（JSON 配列の文字）→ 字の並び。読めなければ空（Python の in_values と同じ）。
+fn in_values(value: &str) -> Vec<String> {
+    match serde_json::from_str::<Value>(value) {
+        Ok(Value::Array(items)) => items.iter().filter_map(|x| x.as_str().map(str::to_string)).take(MAX_IN_VALUES).collect(),
+        _ => vec![],
+    }
 }
 
 fn relative_unit(op: &str) -> Option<&'static str> {
@@ -404,6 +443,20 @@ fn build_filter_where(filters: &[Filter], today: NaiveDate) -> Result<(Vec<Strin
                 };
                 parts.push(format!("Val(CStr({col})) {sign} ?"));
                 params.push(SqlValue::Real(pyfmt::val(&Py::Text(value))));
+            }
+            "in" => {
+                let vals = in_values(value);
+                let k = slice_key(&f.column, &f.key);
+                let some: Vec<&String> = vals.iter().filter(|v| !v.is_empty()).collect();
+                let mut ors = vec![];
+                if !some.is_empty() {
+                    ors.push(format!("{k} IN ({})", vec!["?"; some.len()].join(",")));
+                }
+                if vals.iter().any(|v| v.is_empty()) {
+                    ors.push(format!("{k} IS NULL"));
+                }
+                parts.push(if ors.is_empty() { "0=1".into() } else { format!("({})", ors.join(" OR ")) });
+                params.extend(some.into_iter().map(|v| text(v.clone())));
             }
             _ if relative_unit(op).is_some() => {
                 parts.push(format!("ToDate({col}) >= ?"));
@@ -622,6 +675,59 @@ fn date_hints(c: &Connection, t: &str, filters: &[Filter], today: NaiveDate) -> 
 }
 
 /// 一覧の1ページ（Python の lot_list.query と同じ答え）。default_page_size は設定の件数（引数に page_size が無いとき）。
+/// スライサーに並べる値（重複なし）と、ほかの絞り込みのもとでの件数（Python の lot_list.slicer と同じ）。
+/// 失敗は (状態, 理由)。列が無いときは 400。
+pub fn slicer(path: &Path, a: &Args, column: &str, key: &str, preferred_table: &str, today: NaiveDate) -> Result<Value, (u16, String)> {
+    let t0 = Instant::now();
+    let down = |e: String| (503, e);
+    let q = pyfmt::strip(&a.search).to_string();
+    let c = connect_ro(path).map_err(down)?;
+    let names = tables(&c).map_err(down)?;
+    let t = if names.contains(&a.table) { a.table.clone() } else { pick_table(&names, preferred_table) };
+    if t.is_empty() {
+        return Err((503, "品質データにテーブルが1つもありません。".into()));
+    }
+    let cs = dedup(&raw_columns(&c, &t).map_err(down)?);
+    if !cs.iter().any(|x| x == column) {
+        return Err((400, format!("列「{column}」がありません。")));
+    }
+    let kind = slice_key_kind(key);
+    let (mut where_parts, mut params): (Vec<String>, Vec<SqlValue>) = (vec![], vec![]);
+    if !q.is_empty() {
+        where_parts.push(format!("({})", cs.iter().map(|x| format!("CStr({}) LIKE ?", qi(x))).collect::<Vec<_>>().join(" OR ")));
+        params.extend(cs.iter().map(|_| SqlValue::Text(format!("%{q}%"))));
+    }
+    let (fp, fpp) = build_filter_where(&safe_filters(&a.filters, &cs), today).map_err(down)?;
+    where_parts.extend(fp);
+    params.extend(fpp);
+    let hit = if where_parts.is_empty() {
+        "COUNT(*)".to_string()
+    } else {
+        format!("SUM(CASE WHEN {} THEN 1 ELSE 0 END)", where_parts.join(" AND "))
+    };
+    let sql = format!(
+        "SELECT v, n, a FROM (SELECT {} AS v, {hit} AS n, COUNT(*) AS a FROM {} GROUP BY 1) ORDER BY v IS NULL, SortKey(v), v LIMIT {}",
+        slice_key(column, &kind),
+        qi(&t),
+        MAX_SLICER_VALUES + 1
+    );
+    let mut st = c.prepare(&sql).map_err(|e| down(sql_err(e)))?;
+    let mut rows = st.query(rusqlite::params_from_iter(params.iter())).map_err(|e| down(sql_err(e)))?;
+    let mut values = vec![];
+    while let Some(r) = rows.next().map_err(|e| down(sql_err(e)))? {
+        let v: Option<String> = r.get(0).map_err(|e| down(sql_err(e)))?;
+        let n: Option<i64> = r.get(1).map_err(|e| down(sql_err(e)))?;
+        let all: i64 = r.get(2).map_err(|e| down(sql_err(e)))?;
+        values.push(json!({"value": v.unwrap_or_default(), "count": n.unwrap_or(0), "all": all}));
+    }
+    let truncated = values.len() > MAX_SLICER_VALUES;
+    values.truncate(MAX_SLICER_VALUES);
+    Ok(json!({
+        "table": t, "column": column, "key": kind, "values": values, "truncated": truncated,
+        "timing": {"server": t0.elapsed().as_millis() as i64},
+    }))
+}
+
 pub fn query(path: &Path, a: &Args, preferred_table: &str, default_page_size: i64, today: NaiveDate) -> Result<Value, String> {
     let t0 = Instant::now();
     let page = match a.page.as_deref() {

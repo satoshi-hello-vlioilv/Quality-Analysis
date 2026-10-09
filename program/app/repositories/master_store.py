@@ -165,7 +165,8 @@ class MasterStore:
         # 参照先マスタは、共有フォルダがあればいつも共有（読みに行く場所は全員で同じ。1台で直せば全員に効く）
         # アクセス権限も同じ（権限は全員で1つ。PC ごとに違うと、権限を持たない PC で書き換えられる）
         # app_seeds: 起動で一度だけ当てた初期値の記録（services/master_seeds.py）。全員で1つ
-        self.shared_names = set(cfg.get("masters") or ["roll_master", "equipment_master"]) | {"path_settings", "access_permissions", "app_seeds"}
+        # ui_defaults: 新しく入れた PC の一覧の表示の初期設定（services/ui_defaults.py）。開発者が置く。全員で1つ
+        self.shared_names = set(cfg.get("masters") or ["roll_master", "equipment_master"]) | {"path_settings", "access_permissions", "app_seeds", "ui_defaults"}
         self.lock_ttl = float(cfg.get("lock_ttl_seconds", LOCK_TTL_DEFAULT))
         self.refresh_sec = float(cfg.get("refresh_seconds", REFRESH_DEFAULT))
         root = Path(local_root) if local_root else app_env.local_root()

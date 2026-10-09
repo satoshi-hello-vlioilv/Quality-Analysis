@@ -228,7 +228,7 @@
     if (S.table) q.set("table", S.table);
     q.set("page", S.page); q.set("page_size", S.pageSize);
     if (S.search) q.set("search", S.search);
-    const list = S.genericFilters.map(({ column, op, value }) => ({ column, op, value })).concat(adhocFilters());
+    const list = baseFilters().concat(window.LotListSlicer.filters());
     if (list.length) q.set("filters", JSON.stringify(list));
     const sorts = effectiveSorts();
     if (sorts.length) q.set("sorts", JSON.stringify(sorts));
@@ -254,7 +254,7 @@
       S.loadedAt = (S.source && S.source.copiedAt) || null;
       store.set(KEY.table, S.table);
       // 表が初めて決まった（サーバーが既定の表を選んだ）ら、その表の覚えを戻して引き直す
-      if (contextKey !== S.table && syncContext() && (S.genericFilters.length || S.sorts.length || adhocActive() || grouped())) {
+      if (contextKey !== S.table && syncContext() && (S.genericFilters.length || S.sorts.length || adhocActive() || grouped() || window.LotListSlicer.filters().length)) {
         S.loading = false; return load();
       }
     } catch (e) {
@@ -263,6 +263,7 @@
     }
     S.loading = false;
     renderAll();
+    window.LotListSlicer.refresh();   // 件数を今の絞り込みで数え直す
   }
 
   /* ================= 表（コンテキスト）ごとの覚え ================= */
@@ -321,7 +322,7 @@
   function dropAllFilters({ adhoc: withAdhoc = false } = {}) {
     const locked = S.genericFilters.filter((f) => f.locked);
     S.genericFilters = locked.length && !confirmLocked(locked) ? locked : [];
-    if (withAdhoc) resetAdhoc();
+    if (withAdhoc) { resetAdhoc(); window.LotListSlicer.clearAll(); }   // 全件を見る: スライサーの選択も外す
   }
   function registeredPreset(f) {
     const k = filterKey(f);
@@ -395,6 +396,8 @@
   const adhocColumnOk = () => !!adhoc.column && (!S.columns.length || S.columns.includes(adhoc.column));
   const adhocActive = () => adhocColumnOk() && (noValueOp(adhoc.op)
     || (isRel(adhoc.op) ? /^\d+$/.test(String(adhoc.value || "").trim()) : !!String(adhoc.value || "").trim()));
+  /** スライサーより前の絞り込み（条件・列で絞り込む）。スライサーが自分の件数を数えるときにも使う */
+  const baseFilters = () => S.genericFilters.map(({ column, op, value }) => ({ column, op, value })).concat(adhocFilters());
   const adhocFilters = () => adhocActive() ? [{ column: adhoc.column, op: adhoc.op, value: noValueOp(adhoc.op) ? "" : String(adhoc.value).trim() }] : [];
   const adhocLabel = () => adhoc.column ? condLabel({ column: adhoc.column, op: adhoc.op, value: String(adhoc.value || "").trim() }) : "";
   function applyAdhoc(now) {
@@ -440,6 +443,7 @@
           <span class="fb-cond-key">条件</span><b id="llCondCount" class="fb-cond-n">0</b><i class="hd-caret" aria-hidden="true">▾</i>
         </button>
         <button id="llAdhocToggle" class="filter-adhoc-toggle" type="button" aria-expanded="false" aria-controls="llAdhocRow">列で絞り込む</button>
+        <button id="llSlicerBtn" class="sx-entry" type="button" aria-expanded="false" aria-controls="llSlicer" title="列の値（重複なし）を並べ、押して絞り込みます（Excel のスライサーと同じ）">スライサー</button>
         <div class="filter-token-input" id="llTokenInput" hidden>
           <span class="filter-token-key" aria-hidden="true">＋条件</span>
           <input class="filter-token-search" id="llTokenSearch" autocomplete="off" placeholder="列名・値を打つと候補が出ます" aria-label="条件を検索して足す">
@@ -450,7 +454,9 @@
           <button id="llColBtn" type="button" class="ll-colbtn" title="この一覧に出す列・並び・幅・書式・読み替えをまとめて設定します">
             <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="M6 2.5v11M10.5 2.5v11"/></svg>表示列</button>
           <button id="llViewBtn" type="button" aria-haspopup="dialog" aria-expanded="false" title="行間・並び・表示件数と、機能（ロット番号でまとめる・カード）の使う／使わないを決めます">表の見せ方 ▾</button>
+          <button id="llProfileBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="llProfileMenu" title="この PC の一覧の表示（表示列・スライサー・並び・見せ方・登録した条件）を書き出す・読み込む・初期設定に戻す">表示の設定 ▾</button>
         </div>
+        <div class="ll-profile" id="llProfileMenu" hidden role="menu" aria-label="表示の設定"></div>
         <div class="ll-viewmenu" id="llViewMenu" hidden role="dialog" aria-label="表の見せ方"></div>
         <div class="fb-cond-menu" id="llCondMenu" hidden role="menu" aria-label="条件">
           <div class="fb-cond-list" id="llCondList"></div>
@@ -490,14 +496,15 @@
 
     // 一覧を検索（打つとすぐ。待ってからまとめて1回）
     let st = null;
-    $("#llSearch").addEventListener("input", (e) => {
+    TPA.onText($("#llSearch"), (el) => {   // 変換中は探しに行かない（確定してから）
       clearTimeout(st);
-      st = setTimeout(() => { S.search = e.target.value.trim(); S.page = 1; load(); }, SEARCH_DEBOUNCE_MS);
+      st = setTimeout(() => { S.search = el.value.trim(); S.page = 1; load(); }, SEARCH_DEBOUNCE_MS);
     });
     $("#llSearch").addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { clearTimeout(st); S.search = e.target.value.trim(); S.page = 1; load(); }
+      if (e.key === "Enter" && !TPA.composing(e)) { clearTimeout(st); S.search = e.target.value.trim(); S.page = 1; load(); }
     });
     $("#llPresetBtn").onclick = (e) => openPresetMenu(e.currentTarget);
+    $("#llProfileBtn").onclick = () => ($("#llProfileMenu").hidden ? openProfileMenu() : $("#llProfileMenu").hidden = true);
     $("#llCondBtn").onclick = () => toggleCondMenu();
     $("#llCondMenu").addEventListener("click", (e) => { if (e.target.closest(".fb-cond-acts button")) closeCondMenu(); });
     $("#llAddCond").onclick = () => openTokenSearch();
@@ -512,8 +519,9 @@
     $("#llAdhocColumn").onchange = () => { adhoc.column = $("#llAdhocColumn").value; saveAdhocSetup(); updateAdhocSuggestions(); renderAdhocRow(); applyAdhoc(true); };
     $("#llAdhocOp").onchange = () => { adhoc.op = $("#llAdhocOp").value; saveAdhocSetup(); renderAdhocRow(); applyAdhoc(true); };
     const box = $("#llAdhocValue");
-    box.addEventListener("input", () => { adhoc.value = box.value; renderAdhocRow(); applyAdhoc(false); });
+    TPA.onText(box, () => { adhoc.value = box.value; renderAdhocRow(); applyAdhoc(false); });
     box.addEventListener("keydown", (e) => {
+      if (TPA.composing(e)) return;   // 変換の確定の Enter・Esc は IME のもの
       if (e.key === "Enter") { e.preventDefault(); adhoc.value = box.value; renderAdhocRow(); applyAdhoc(true); }
       else if (e.key === "Escape" && box.value) { e.preventDefault(); e.stopPropagation(); clearAdhoc(); }
     });
@@ -743,8 +751,9 @@
   }
   function bindTokenSearch() {
     const inp = $("#llTokenSearch");
-    inp.addEventListener("input", () => renderSuggest(inp.value));
+    TPA.onText(inp, () => renderSuggest(inp.value));
     inp.addEventListener("keydown", (e) => {
+      if (TPA.composing(e)) return;   // 変換の確定の Enter で候補を選ばない
       const items = $$(".fs-item", $("#llSuggest"));
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault(); if (!items.length) return;
@@ -754,6 +763,38 @@
       else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeTokenSearch(); $("#llCondBtn").focus(); }
     });
     inp.addEventListener("blur", () => setTimeout(closeTokenSearch, 120));
+  }
+
+  /* ---- 表示の設定（この PC の一覧の表示をまとめて書き出す・読み込む・初期設定。中身は lotlist-profile.js） ---- */
+  async function openProfileMenu() {
+    const m = $("#llProfileMenu"), b = $("#llProfileBtn"), P = window.LotListProfile;
+    let can = false;
+    try { const d = await (await fetch("/api/ui-defaults", { cache: "no-store" })).json(); can = !!d.canPublish;
+      window.TPA_UI_PROFILE = { keys: d.keys, defaults: d.defaults, updatedAt: d.updatedAt, updatedBy: d.updatedBy }; } catch (_) { /* 置けるかは分からない＝出さない */ }
+    const who = P.defaultsWho();
+    const item = (act, title, note, extra = "") => `<button type="button" role="menuitem" data-act="${act}"${extra}><b>${title}</b><small>${note}</small></button>`;
+    m.innerHTML = item("export", "書き出し…", "表示列・スライサー・並び・見せ方・登録した条件を 1 つのファイルに")
+      + item("import", "読み込み…", "書き出したファイルから、この PC の表示を置き換えます")
+      + item("reset", "初期設定に戻す", P.hasDefaults() ? `開発者が配った見せ方（${esc(who)}）に戻します` : "初期設定はまだ配られていません", P.hasDefaults() ? "" : " disabled")
+      + (can ? `<div class="pf-dev">${item("publish", '今の表示を初期設定にする <i>開発者</i>', "新しく入れた PC が最初に開いたときの見せ方になります（全員の PC に効きます）")}</div>` : "")
+      + '<p class="pf-msg" id="llProfileMsg" aria-live="polite" hidden></p>';
+    m.hidden = false; b.setAttribute("aria-expanded", "true");
+    const close = () => { m.hidden = true; b.setAttribute("aria-expanded", "false"); };
+    TPA.dismissable(m, close, { keep: b });   // 外を押す・Esc で閉じる（項目を押しても開いたまま＝結果を読める）
+    const say = (t, ng) => { const x = $("#llProfileMsg"); x.hidden = false; x.textContent = t; x.classList.toggle("is-ng", !!ng); };
+    m.onclick = async (e) => {
+      const x = e.target.closest("[data-act]"); if (!x || x.disabled) return;
+      try {
+        if (x.dataset.act === "export") { const n = P.exportFile(); say(`${n} 項目を書き出しました`); }
+        else if (x.dataset.act === "import") { say("読み込んでいます…"); if ((await P.importFile()) == null) say("読み込みをやめました"); }
+        else if (x.dataset.act === "reset") { if (confirm("この PC の一覧の表示を、開発者が配った初期設定に戻します（今の表示列・スライサー・並び・登録した条件は置き換わります）。よろしいですか？")) await P.resetToDefaults(); }
+        else if (x.dataset.act === "publish") {
+          if (!confirm("今のこの PC の一覧の表示を、初期設定にします。新しく入れた PC が最初に開いたときに、この見せ方になります。よろしいですか？")) return;
+          const n = await P.publish(); say(`初期設定にしました（${n} 項目）`);
+        }
+      } catch (err) { say(err.message, true); }
+    };
+    m.querySelector("button:not(:disabled)")?.focus();
   }
 
   /* ---- プリセットの切り替えメニュー ---- */
@@ -1147,7 +1188,7 @@
         + ` <button type="button" data-ll-settings title="元ファイルの場所・名前を「マスタ管理」の「参照先」で直します">参照先を開く</button></div>`;
       note.hidden = false; return;
     }
-    const filtered = new Set(S.genericFilters.map((f) => f.column).concat(adhocFilters().map((f) => f.column)));
+    const filtered = new Set(baseFilters().concat(window.LotListSlicer.filters()).map((f) => f.column));
     const t = layoutTarget(), LC = window.LotListColumns;
     LC.setContext(columnContext());
     const all = LC.allColumns(t, S.columns);
@@ -1286,17 +1327,48 @@
 
   /* ---- 一覧の拡大（一時的: この窓のあいだだけ覚え、閉じると 100%） ----
      表に CSS の zoom を掛ける（列の幅・固定・見出しの貼り付きごと拡大する）。幅の覚えは拡大前の px のまま（lotlist-columns.js） */
-  const ZOOM = { key: "tpa.lotlist.zoom.v1", min: 60, max: 200, step: 10 };
+  const ZOOM = { key: "tpa.lotlist.zoom.v1", stepKey: "tpa.lotlist.zoomStep.v1", min: 60, max: 200, steps: [5, 10, 20, 25], step: 10 };
+  const zoomStep = () => { const s = +TPA.local.get(ZOOM.stepKey, ZOOM.step); return ZOOM.steps.includes(s) ? s : ZOOM.step; };
+  /** 刻み s で動ける範囲（どの刻みでも 100% に止まるように、端を 100% から刻みで数えた所にする） */
+  const zoomRange = (s) => ({ min: 100 - Math.floor((100 - ZOOM.min) / s) * s, max: 100 + Math.floor((ZOOM.max - 100) / s) * s });
   function setZoom(pct) {
-    const z = Math.min(ZOOM.max, Math.max(ZOOM.min, Math.round((+pct || 100) / ZOOM.step) * ZOOM.step));
+    const s = zoomStep(), { min, max } = zoomRange(s);
+    const z = Math.min(max, Math.max(min, 100 + Math.round(((+pct || 100) - 100) / s) * s));
     $("#llGrid").style.zoom = z === 100 ? "" : String(z / 100);
     $("#llZoomRange").value = z; $("#llZoomValue").textContent = `${z}%`;
+    $("#llZoomMinus").disabled = z <= min; $("#llZoomPlus").disabled = z >= max;
     $("#llZoomReset").hidden = z === 100; $("#llZoom").classList.toggle("is-zoomed", z !== 100);
     TPA.session.set(ZOOM.key, z);
   }
+  /** 刻みを当てる: つまみの範囲・刻み・目盛り（100% は長い線）・札の字 */
+  function paintZoomStep() {
+    const s = zoomStep(), { min, max } = zoomRange(s), r = $("#llZoomRange");
+    Object.assign(r, { min, max, step: s });
+    $("#llZoomTicks").innerHTML = Array.from({ length: (max - min) / s + 1 }, (_, i) => min + i * s)
+      .map((v) => `<i class="${v === 100 ? "is-100" : ""}" style="left:${(v - min) / (max - min) * 100}%"></i>`).join("");
+    $("#llZoomStep").textContent = `${s}%刻み ▾`;
+    $("#llZoomMinus").title = `${s}% 小さく`; $("#llZoomPlus").title = `${s}% 大きく`;
+  }
+  function openZoomSteps() {
+    const m = $("#llZoomSteps"), b = $("#llZoomStep");
+    m.innerHTML = ZOOM.steps.map((s) => `<button type="button" role="menuitemradio" aria-checked="${s === zoomStep()}" data-step="${s}">${s}%</button>`).join("");
+    m.hidden = false; b.setAttribute("aria-expanded", "true");
+    const close = () => { m.hidden = true; b.setAttribute("aria-expanded", "false"); };
+    const off = TPA.dismissable(m, close, { keep: b });
+    m.onclick = (e) => {
+      const x = e.target.closest("[data-step]"); if (!x) return;
+      TPA.local.set(ZOOM.stepKey, +x.dataset.step); paintZoomStep(); setZoom($("#llZoomRange").value);
+      off(); close(); b.focus();
+    };
+    m.querySelector('[aria-checked="true"]')?.focus();
+  }
   function bindZoom() {
     $("#llZoomRange").addEventListener("input", (e) => setZoom(e.target.value));
+    $("#llZoomMinus").addEventListener("click", () => setZoom(+$("#llZoomRange").value - zoomStep()));
+    $("#llZoomPlus").addEventListener("click", () => setZoom(+$("#llZoomRange").value + zoomStep()));
+    $("#llZoomStep").addEventListener("click", () => ($("#llZoomSteps").hidden ? openZoomSteps() : $("#llZoomStep").focus()));
     $("#llZoomReset").addEventListener("click", () => { setZoom(100); $("#llZoomRange").focus(); });
+    paintZoomStep();
     setZoom(TPA.session.get(ZOOM.key, 100));
   }
   function bindGrid() {
@@ -1382,6 +1454,11 @@
     root = $("#lotListScreen");
     onPick = opts.onPick || onPick;
     buildBar(); bindGrid();
+    window.LotListSlicer.mount({
+      table: () => S.table, columns: () => S.columns, search: () => S.search, baseFilters, keyOf: levelKeyKind,
+      label: (c) => window.LotListColumns.label(layoutTarget(), c),
+      onChange: () => { S.page = 1; load(); },
+    });
     window.LotListCard.mount({
       rows: () => S.rows, target: layoutTarget, lotColumn: () => S.lotColumn, lotKey,
       columns: () => window.LotListColumns.allColumns(layoutTarget(), S.columns),

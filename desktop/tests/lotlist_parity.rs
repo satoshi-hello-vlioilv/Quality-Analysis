@@ -4,7 +4,7 @@
 mod common;
 
 use chrono::NaiveDate;
-use da_core::lotlist::{query, Args};
+use da_core::lotlist::{query, slicer, Args};
 use serde_json::Value;
 
 fn args(case: &Value) -> Args {
@@ -31,7 +31,13 @@ fn rust_answers_like_python() {
     let mut bad = vec![];
     for (i, (case, want)) in cases.iter().zip(expected).enumerate() {
         // Python の oracle と同じ渡し方（設定の件数は 500・設定の表は無し）
-        let got = match query(&db, &args(case), "", 500, today) {
+        let s = |k: &str| case.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+        let answer = match case.get("slicer") {
+            // スライサーに並べる値（/api/lotlist/slicer）
+            Some(_) => slicer(&db, &args(case), &s("slicer"), &s("key"), "", today).map_err(|(_, e)| e),
+            None => query(&db, &args(case), "", 500, today),
+        };
+        let got = match answer {
             Ok(mut v) => {
                 v.as_object_mut().unwrap().remove("timing");
                 serde_json::json!({"ok": v})

@@ -469,6 +469,44 @@ class ApiTests(Base):
         self.assertEqual(len(d["groups"]), 5)
         self.assertNotIn("groups", self.c.get("/api/lotlist").get_json(), "group=1 のときだけまとめる")
 
+    def test_slicer_lists_values_and_filters_by_them(self):
+        """スライサー: 列の重複なしの値（前後の空白を除く・空欄は最後に 1 つ）と件数。選んだ値（空欄も）で絞り込める。"""
+        d = self.c.get("/api/lotlist/slicer?column=" + "コメント").get_json()
+        self.assertEqual([v["value"] for v in d["values"]], ["尾", "要確認", "頭 30m", ""])
+        self.assertEqual(d["values"][-1]["count"], 2, "None と '' は同じ空欄")
+        f = [{"column": "コメント", "op": "in", "value": json.dumps(["", "尾"])}]
+        self.assertEqual(self.c.get("/api/lotlist?filters=" + json.dumps(f)).get_json()["count"], 3)
+        # 件数はほかの絞り込みのもとで数える。当たらない値も 0 件で並ぶ（選べる）
+        other = [{"column": "発生設備", "op": "eq", "value": "CAL"}]
+        d = self.c.get("/api/lotlist/slicer?column=異常内容&filters=" + json.dumps(other)).get_json()
+        self.assertEqual({v["value"]: (v["count"], v["all"]) for v in d["values"]}, {"ロール疵": (0, 1), "押し疵": (1, 1), "汚れ": (1, 3)})
+        self.assertEqual(self.c.get("/api/lotlist/slicer?column=無い列").status_code, 400)
+
+    def test_ui_defaults_only_developer_and_only_display_keys(self):
+        """一覧の表示の初期設定: 開発者だけが置ける。表示の設定の範囲の名前だけを置き、画面に埋めて返す。"""
+        from app.services import access
+        base = self.tmp / "base"   # 置く先（手元のみのマスタは base/data）。リポジトリの data/ を汚さない
+        shutil.copytree(Path(__file__).resolve().parents[1] / "data", base / "data")
+        self.c = create_app({"MASTER_STORE": MasterStore(base, local_root=self.tmp / "m2", settings={}),
+                             "LOT_MIRROR": DbMirror("lot_list", self.share, self.cache)}).test_client()
+        body = {"keys": {"tpa.lotlist.slicer.v1": '{"open":true}', "tpa.lotlist.zoom.v1": "120", "他.名前": "x"}}
+        orig = access.flags
+        try:
+            access.flags = lambda rows, login, pc: {"role": "一般ユーザー", "masterEdit": "編集可", "masterEditStored": "", "matchedId": None}
+            self.assertEqual(self.c.put("/api/ui-defaults", json=body).status_code, 403, "一般ユーザーは置けない")
+            self.assertFalse(self.c.get("/api/ui-defaults").get_json()["canPublish"])
+            access.flags = lambda rows, login, pc: {"role": "開発者", "masterEdit": "編集可", "masterEditStored": "", "matchedId": None}
+            r = self.c.put("/api/ui-defaults", json=body)
+            self.assertEqual(r.status_code, 200, r.get_json())
+            d = self.c.get("/api/ui-defaults").get_json()
+            self.assertTrue(d["canPublish"])
+            self.assertEqual(d["defaults"], {"tpa.lotlist.slicer.v1": '{"open":true}'}, "拡大率（その時だけ）・範囲の外の名前は置かない")
+            self.assertIn("tpa.lotlist.layout.v1", d["keys"])
+            self.assertIn("TPA_UI_PROFILE", self.c.get("/").get_data(as_text=True), "画面に埋める（入れたばかりの PC が開くときに当てる）")
+            self.assertEqual(self.c.put("/api/ui-defaults", json={"keys": {}}).get_json()["defaults"], {}, "空で外せる")
+        finally:
+            access.flags = orig
+
     def test_refresh_and_source(self):
         self.c.get("/api/lotlist")
         d = self.c.post("/api/lotlist/refresh").get_json()

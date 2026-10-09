@@ -51,6 +51,24 @@ def lotlist():
     return jsonify(out)
 
 
+@bp.get("/api/lotlist/slicer")
+def lotlist_slicer():
+    """スライサーに並べる値（column の重複なしの値と件数）。filters・search は、このスライサー自身を除いた今の絞り込み。
+    デスクトップ版は Rust が同じ答えを作る（desktop/src/lotlist.rs の slicer）。"""
+    plan, fail = lotlist_plan()
+    if fail:
+        return fail
+    a = request.args
+    try:
+        out = lot_list.slicer(plan["path"], column=a.get("column", ""), key=a.get("key", ""), table=a.get("table", ""),
+                              preferred_table=plan["table"], search=a.get("search", ""), filters=a.get("filters", ""))
+    except ValueError as e:
+        return error(str(e), 400)
+    except Exception as e:
+        return error(str(e), 503, source=plan["source"])
+    return jsonify(out)
+
+
 @bp.get("/api/lotlist/settings")
 def lotlist_settings():
     """デスクトップ版の Rust が尋ねる、いまの一覧の設定（参照先マスタで変えた値を重ねたもの）。写しと問い合わせは Rust が受け持つ。

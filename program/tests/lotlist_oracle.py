@@ -4,7 +4,7 @@
     python tests/lotlist_oracle.py 作業フォルダ [行数]
 
 作業フォルダに試験用の品質データ（lotlist_fixture.make）を作り、問い合わせの組（lotlist_fixture.CASES）を
-Python の lot_list.query で引いた答えを、標準出力に JSON で出す:
+Python の lot_list.query（slicer の組は lot_list.slicer）で引いた答えを、標準出力に JSON で出す:
     {"db": DB の場所, "today": "YYYY-MM-DD", "cases": [...], "expected": [{"ok": 答え} | {"error": 理由}, ...]}
 引数の渡し方は /api/lotlist（routes/lotlist.py）と同じ（ページ・件数は文字、group は "1" か）。毎回変わる timing は除く。
 """
@@ -29,6 +29,14 @@ def args_of(case):
 
 def answer(db, case, today):
     a = args_of(case)
+    if "slicer" in a:                    # スライサーに並べる値（/api/lotlist/slicer。列が無いときは 400 と理由）
+        try:
+            out = lot_list.slicer(db, column=a["slicer"], key=a.get("key", ""), table=a.get("table", ""), preferred_table="",
+                                  search=a.get("search", ""), filters=a.get("filters", ""), today=today)
+        except Exception as e:
+            return {"error": str(e)}
+        out.pop("timing", None)
+        return {"ok": out}
     try:
         out = lot_list.query(db, table=a.get("table", ""), preferred_table="", page=a.get("page", 1),
                              page_size=a.get("page_size", 500), search=a.get("search", ""), filters=a.get("filters", ""),

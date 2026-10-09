@@ -910,7 +910,7 @@ function cellHtml(c, raw) {
     default: return v ? escapeHtml(v) : none();
   }
 }
-$("#masterSearch").addEventListener("input", (e) => { mstate.search = e.target.value; renderMasterTable(); });
+TPA.onText($("#masterSearch"), (el) => { mstate.search = el.value; renderMasterTable(); });
 $("#masterBtn").onclick = openMaster;
 $("#masterCloseBtn").onclick = closeMaster;
 TPA.layer($("#masterOverlay"), closeMaster);
