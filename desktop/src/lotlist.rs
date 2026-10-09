@@ -700,7 +700,11 @@ pub fn slicer(path: &Path, a: &Args, column: &str, key: &str, preferred_table: &
     let (fp, fpp) = build_filter_where(&safe_filters(&a.filters, &cs), today).map_err(down)?;
     where_parts.extend(fp);
     params.extend(fpp);
-    let hit = if where_parts.is_empty() { "COUNT(*)".to_string() } else { format!("SUM(CASE WHEN {} THEN 1 ELSE 0 END)", where_parts.join(" AND ")) };
+    let hit = if where_parts.is_empty() {
+        "COUNT(*)".to_string()
+    } else {
+        format!("SUM(CASE WHEN {} THEN 1 ELSE 0 END)", where_parts.join(" AND "))
+    };
     let sql = format!(
         "SELECT v, n, a FROM (SELECT {} AS v, {hit} AS n, COUNT(*) AS a FROM {} GROUP BY 1) ORDER BY v IS NULL, SortKey(v), v LIMIT {}",
         slice_key(column, &kind),

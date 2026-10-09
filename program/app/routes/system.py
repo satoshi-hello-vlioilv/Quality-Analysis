@@ -5,16 +5,25 @@ from ..web import current_app, jsonify, render_template, request
 from .. import effective_settings
 from ..brand import BRAND
 from ..models import DEFAULT_UNWIND
-from ..services import lotdsp_api, lotdsp_direct, presence, ui_state
+from ..services import access, lotdsp_api, lotdsp_direct, presence, ui_defaults, ui_state
 from ..version import APP_VERSION, CHANGELOG
-from .common import api_map, api_settings, bp, me, roles_from
+from .common import api_map, api_settings, bp, error, me, roles_from
+
+
+def ui_profile():
+    """一覧の表示の設定の範囲と初期設定（画面に埋める。入れたばかりの PC は開くときに初期設定を当てる）。"""
+    try:
+        d = ui_defaults.load(current_app.config["MASTER_STORE"])
+    except Exception:            # 初期設定を読めなくても画面は開く（既定の見せ方で）
+        d = {"keys": {}, "updated_at": "", "updated_by": {}, "revision": 0}
+    return {"keys": list(ui_defaults.PROFILE_KEYS), "defaults": d["keys"], "updatedAt": d["updated_at"], "updatedBy": d["updated_by"]}
 
 
 @bp.get("/")
 def index():
     # 画面の設定の控え（services/ui_state.py）を画面に埋めておく。画面の部品が設定を読む前に戻せる（読み直しが要らない）
     resp = current_app.make_response(render_template("index.html", app_version=APP_VERSION, build=current_app.config.get("BUILD", ""),
-                                                     ui_state=ui_state.load()))
+                                                     ui_state=ui_state.load(), ui_profile=ui_profile()))
     resp.headers["Cache-Control"] = "no-store"      # 画面はいつもサーバーから（古い画面を使い回さない）
     return resp
 
@@ -82,3 +91,25 @@ def _presence_beat():
         return {"version": presence.version_notice(m["flags"]["role"]), "revoked": m["revoked"]}
     except Exception:
         return {"version": None, "revoked": None}
+
+
+@bp.get("/api/ui-defaults")
+def ui_defaults_get():
+    """一覧の表示の初期設定（新しく入れた PC が開いたときに当てる）と、この PC が置けるか。"""
+    out = ui_profile()
+    out["canPublish"] = me()["flags"]["role"] == access.ROLE_DEVELOPER
+    return jsonify(out)
+
+
+@bp.put("/api/ui-defaults")
+def ui_defaults_put():
+    """今の表示を初期設定に押し上げる（開発者だけ。全員の PC の「入れたときの初期設定」に効く）。keys が空なら初期設定を外す。"""
+    m = me()
+    if m["flags"]["role"] != access.ROLE_DEVELOPER:
+        return error(f"初期設定を置けるのは開発者だけです（この PC は {m['flags']['role']}）。", 403, "forbidden")
+    body = request.get_json(silent=True) or {}
+    try:
+        n = ui_defaults.replace(current_app.config["MASTER_STORE"], body.get("keys") or {})
+    except ValueError as e:
+        return error(str(e), 400)
+    return jsonify(count=n, **ui_profile())

@@ -95,6 +95,11 @@ export const STATES = [
   ["calc", async (p) => { await closeAll(p); await p.click("#tabCalc"); await sleep(500); }, "[data-next], #query"],
   ["appmenu", async (p) => { await p.click("#appBtn"); await sleep(500); }, "[data-next], #amShortcut"],
   ["changelog", async (p) => { await closeAll(p); await p.click("#verBadge"); await sleep(600); }, "[data-next], #clClose"],
+  // スライサー（設備で CR1・L-1 を選び、不良名を足したところ）と、表示の設定（道具の行の「表示の設定 ▾」）
+  ["slicer", async (p) => { await closeAll(p); await p.click("#tabList"); await sleep(300); await p.click("#llSlicerBtn"); await sleep(400);
+    for (const c of ["設備", "不良名"]) { await p.selectOption("#llSlicerAdd", c); await sleep(700); }
+    for (const v of ["CR1", "L-1"]) { await p.click(`#llSlicer .sx-card[data-col="設備"] .sx-v[data-v="${v}"]`); await sleep(700); } }, "[data-next], #llSlicerAdd"],
+  ["profile", async (p) => { await p.click("#llProfileBtn"); await sleep(600); }, "[data-next], #llProfileMenu button"],
   // 表示列の設定（一覧の「表示列」）: 開いた直後・列を 1 つ選んだところ
   ["columns", async (p) => { await closeAll(p); await p.click("#tabList"); await sleep(300); await p.click("#llColBtn"); await sleep(600); }, "[data-next], #lcSave"],
   ["columns-detail", async (p) => { await p.click('#lcList li[data-col="発生日"]').catch(() => p.click("#lcList li[data-col]")); await sleep(500); }, "[data-next], #lcSave"],

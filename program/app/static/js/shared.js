@@ -39,20 +39,21 @@
     let timer = null;
     function save(beacon) {
       clearTimeout(timer); timer = null;
-      if (!pending.size) return;
+      if (!pending.size) return Promise.resolve();
       try {
         const changed = {}, removed = [], keys = [...pending];
         keys.forEach((k) => { const v = ls().getItem(k); if (v == null) removed.push(k); else changed[k] = v; });
         pending.clear();
         const body = JSON.stringify({ changed, removed }), base = +ls().getItem(REV) || 0;
-        if (beacon && sendBeacon(URL, body)) return;
-        fetch(URL, { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: body.length < 60000 })
+        if (beacon && sendBeacon(URL, body)) return Promise.resolve();
+        return fetch(URL, { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: body.length < 60000 })
           .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
           // 自分の続きなら控えと揃っている。そうでなくても「一度は送れた」（前の版の設定は控えに入った）印に 0 を置き、
           // 次に開くとき控え全体から戻す（印が無いままだと、開くたびに前の版の設定として重ね続ける）
           .then((d) => { if (d.rev === base + 1) ls().setItem(REV, String(d.rev)); else if (ls().getItem(REV) == null) ls().setItem(REV, "0"); })
-          .catch(() => { keys.forEach((k) => pending.add(k)); });   // 送れなかった名前は次に送る
+          .catch(() => { keys.forEach((k) => pending.add(k)); });   // 送れなかった名前は次に送る（戻り値: 送り終えたら解決）
       } catch (_) { /* 送れなくても画面は動く */ }
+      return Promise.resolve();
     }
     function touched(k) {
       if (!String(k).startsWith(PREFIX)) return;
@@ -66,6 +67,10 @@
         if (rev == null && local.length) {                   // 前の版から使ってきた設定
           Object.entries(keys).forEach(([k, v]) => { if (ls().getItem(k) == null) ls().setItem(k, v); });
           local.forEach(touched);
+        } else if (rev == null && !local.length && !(snap.rev || 0)) {
+          // 入れたばかりの PC（画面の設定も控えも無い）: 開発者が置いた一覧の表示の初期設定を当てる（services/ui_defaults.py）
+          const defs = (window.TPA_UI_PROFILE || {}).defaults || {};
+          Object.entries(defs).forEach(([k, v]) => { ls().setItem(k, v); touched(k); });
         } else if ((snap.rev || 0) > (+rev || 0)) {
           local.forEach((k) => { if (!(k in keys)) ls().removeItem(k); });
           Object.entries(keys).forEach(([k, v]) => ls().setItem(k, v));

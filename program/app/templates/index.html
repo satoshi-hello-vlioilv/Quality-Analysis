@@ -340,12 +340,14 @@
 <script>window.EXPLAIN3D_URL = "{{ url_for('static', filename='js/explain3d.js') }}";</script>
 <!-- 画面の設定の控え（WebView の作業場所が消えても戻す。以前のブラウザ版で使い込んだ設定も引き継ぐ。shared.js が最初に戻す） -->
 <script>window.TPA_UI_STATE = {{ ui_state|tojson }};</script>
+<script>window.TPA_UI_PROFILE = {{ ui_profile|tojson }};</script>
 <script src="{{ url_for('static', filename='js/shared.js') }}"></script>
 <script src="{{ url_for('static', filename='js/list-formula.js') }}"></script>
 <script src="{{ url_for('static', filename='js/lotlist-rules.js') }}"></script>
 <script src="{{ url_for('static', filename='js/lotlist-columns.js') }}"></script>
 <script src="{{ url_for('static', filename='js/lotlist-card.js') }}"></script>
 <script src="{{ url_for('static', filename='js/lotlist-slicer.js') }}"></script>
+<script src="{{ url_for('static', filename='js/lotlist-profile.js') }}"></script>
 <script src="{{ url_for('static', filename='js/lotlist.js') }}"></script>
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 <script src="{{ url_for('static', filename='js/master.js') }}"></script>

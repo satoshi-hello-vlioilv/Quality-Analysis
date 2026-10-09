@@ -133,7 +133,7 @@ impl Lot {
                     let arg = |k: &str| qs.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone()).unwrap_or_default();
                     match lotlist::slicer(&p, &Args::from_query(query), &arg("column"), &arg("key"), &s.table, today) {
                         Ok(v) => (200, v),
-                        Err((st, e)) if st == 400 => (400, json!({"error": e})),
+                        Err((400, e)) => (400, json!({"error": e})),
                         Err((st, e)) => (st, json!({"error": e, "source": m.source_info()})),
                     }
                 }
