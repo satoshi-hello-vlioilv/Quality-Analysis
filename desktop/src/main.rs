@@ -182,6 +182,24 @@ fn native(app: AppHandle, info: serde_json::Value, lot: Arc<Lot>, upd: Arc<Updat
                 Err(e) => Reply { status: 500, ..json_reply(&json!({"error": e})) },
             })
         }
+        // 書き出したファイルの入ったフォルダを開き、そのファイルを選んだ状態にする（保存の案内の「フォルダを開く」）
+        ("POST", "/__desktop/reveal") => {
+            use tauri_plugin_opener::OpenerExt;
+            let path = serde_json::from_slice::<serde_json::Value>(req.body)
+                .ok()
+                .and_then(|v| v["path"].as_str().map(str::to_string))
+                .unwrap_or_default();
+            if path.is_empty() || !std::path::Path::new(&path).exists() {
+                return Some(Reply {
+                    status: 404,
+                    ..json_reply(&json!({"error": "そのファイルが見つかりません（移したか消したかもしれません）。"}))
+                });
+            }
+            Some(match app.opener().reveal_item_in_dir(&path) {
+                Ok(()) => json_reply(&json!({"ok": true})),
+                Err(e) => Reply { status: 500, ..json_reply(&json!({"error": e.to_string()})) },
+            })
+        }
         ("GET", "/__desktop/downloads") => Some(json_reply(&json!(downloads().lock().map(|v| v.clone()).unwrap_or_default()))),
         ("POST", "/__desktop/selftest") => {
             let result: serde_json::Value =
@@ -311,9 +329,10 @@ fn window(app: &AppHandle, label: &str, url: WebviewUrl, splash: Arc<Splash>) ->
                 let _ = w.eval(SELFTEST_JS);
             }
         });
-    // 自己診断のときだけ: 画面のエラーを残し、保存を記録する（利用者の起動では WebView2 の既定の保存の案内のまま）
-    let builder =
-        if selftest_on() { builder.initialization_script(ERROR_WATCH_JS).on_download(|_, ev| record_download(ev)) } else { builder };
+    // 保存（書き出し）を見届け、置いた場所を画面へ知らせる（画面が「保存しました・フォルダを開く」を出す）。
+    // WebView2 の既定の保存の案内は小さくすぐ消え、どこに置いたか分からなかったため。自己診断のときは画面のエラーも残す
+    let builder = builder.on_download(|wv, ev| on_download(&wv, ev));
+    let builder = if selftest_on() { builder.initialization_script(ERROR_WATCH_JS) } else { builder };
     builder.build()
 }
 
@@ -325,14 +344,25 @@ fn open_outside(app: &AppHandle, u: &Url) {
     }
 }
 
-/// 保存（ダウンロード）の記録。**自己診断のときだけ**付ける受け手が書き、`/__desktop/downloads` が自己診断へ渡す。
-/// 利用者の起動では付けない（付けると WebView2 の既定の保存の案内が出なくなる）。
+/// 保存（ダウンロード）の記録。自己診断のとき、`/__desktop/downloads` が自己診断へ渡す。
 fn downloads() -> &'static Mutex<Vec<serde_json::Value>> {
     static D: OnceLock<Mutex<Vec<serde_json::Value>>> = OnceLock::new();
     D.get_or_init(Mutex::default)
 }
 
-/// 保存の始まりと終わりを残す（終わりは置いた先・大きさ・先頭4バイト）。保存先は変えない（既定の「ダウンロード」）。
+/// 保存の始まりと終わり。終わったら置いた場所を画面へ知らせる（tpa:saved。shared.js が受けて案内を出す）。
+/// 保存先は変えない（既定の「ダウンロード」）。自己診断のときは、置いた先・大きさ・先頭4バイトを記録する。
+fn on_download<R: tauri::Runtime>(wv: &tauri::Webview<R>, ev: DownloadEvent<'_>) -> bool {
+    if let DownloadEvent::Finished { path, success, .. } = &ev {
+        let detail = json!({"path": path.as_ref().map(|p| p.display().to_string()), "ok": *success});
+        let _ = wv.eval(format!("window.dispatchEvent(new CustomEvent('tpa:saved', {{detail: {detail}}}))"));
+    }
+    if selftest_on() {
+        record_download(ev);
+    }
+    true
+}
+
 fn record_download(ev: DownloadEvent<'_>) -> bool {
     let row = match ev {
         DownloadEvent::Requested { url, destination } => {

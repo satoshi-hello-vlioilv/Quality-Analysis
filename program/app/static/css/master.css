@@ -53,7 +53,8 @@
 .btn-primary,.btn-danger{height:30px;border:0;border-radius:7px;padding:0 14px;
   font-weight:700;cursor:pointer;font-size:14px;font-family:inherit}
 .btn-primary{background:var(--accent);color:var(--accent-ink)}
-.btn-primary:hover{background:#d69720}
+.btn-primary:hover:not(:disabled){background:#d69720}
+.btn-primary:disabled{background:var(--surface-4);color:var(--faint);cursor:default}   /* 押せないときは色を抜く（押せそうに見せない） */
 .btn-danger{background:var(--danger);color:var(--on-fill)}
 .btn-danger:hover{background:#a52f21}
 
@@ -290,8 +291,8 @@ table.master-table.pz-table{table-layout:auto}   /* 列の幅は中身に合わ�
 .dz-pl-head small{font-size:12.5px;color:var(--muted)}
 .dz-pl-grid{display:grid;grid-template-columns:minmax(0,3fr) auto minmax(0,1.4fr);align-items:end;gap:8px}
 .dz-pl-f{display:flex;flex-direction:column;gap:4px;font-size:12.5px;font-weight:700;color:var(--muted)}
-.dz-pl-f input{font-family:Consolas,"BIZ UDGothic",monospace}
-.dz-pl-sep{padding-bottom:8px;font-size:18px;font-weight:800;color:#9aabb8}
+.dz-pl-f input{flex:0 0 auto;font-family:Consolas,"BIZ UDGothic",monospace}   /* 縦に並べた欄で .ps-input の flex:1 が高さを潰さない */
+.dz-pl-sep{padding-bottom:8px;font-size:18px;font-weight:800;color:var(--muted)}
 .dz-pl-new{margin:8px 0;font-size:13px;color:var(--muted)}
 .dz-pl-new code{font-family:Consolas,"BIZ UDGothic",monospace;font-size:12.5px;background:var(--input-soft);color:var(--h-input);padding:2px 6px;border-radius:4px;word-break:break-all;font-weight:700}
 .dz-pl-copy{display:grid;grid-template-columns:auto 1fr;gap:1px 8px;align-items:start;font-size:13px;cursor:pointer}
@@ -318,3 +319,29 @@ table.master-table.pz-table{table-layout:auto}   /* 列の幅は中身に合わ�
 .dz-t-new.is-copy > em,.dz-t-new.is-switch > em,.dz-t-new.is-empty > em{background:var(--input-soft);color:var(--h-input);font-weight:700}
 .dz-t-new.is-ng > b{color:var(--danger);background:var(--danger-bg)}.dz-t-new.is-ng > em{background:var(--danger-bg);color:var(--danger);font-weight:700}
 .dz-t-dist{background:var(--ok-soft)!important;color:var(--ok-ink)!important}
+
+/* ---------- マスタの置き場（管理 › マスタの置き場）: いまの置き場 → 変える → これまで ---------- */
+.mp-page{display:grid;gap:14px;max-width:1040px}
+.mp-now{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px}
+.mp-where{font-size:14px}.mp-where code{font-family:Consolas,"BIZ UDGothic",monospace;font-size:13.5px;font-weight:700;word-break:break-all}
+.mp-now small,.mp-sub{display:block;margin-top:3px;color:var(--muted);font-size:12.5px;line-height:1.6}
+.mp-tag{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:700}
+.mp-tag::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+.mp-tag.local{background:var(--plain-soft);color:var(--plain-ink)}
+.mp-tag.shared{background:#e3f4f1;color:#1d6b62}
+.mp-tag.off{background:#fff3d6;color:#8a5a00}
+.mp-sec{display:grid;gap:8px;padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.mp-sec > h3{margin:0;font-size:14px}
+.mp-sec .mp-form{margin:0;border:0;padding:0}
+.mp-why,.mp-none{margin:0;color:var(--muted);font-size:13px;line-height:1.6}
+.mp-hist{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.mp-hist li{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;padding:6px 10px;border-radius:7px;background:var(--surface-2);font-size:13px}
+.mp-hist code{font-family:Consolas,"BIZ UDGothic",monospace;font-size:12.5px;word-break:break-all}
+.mp-hist small{color:var(--muted);font-size:12px}
+/* ナビの「マスタの置き場」に添える今の状態（頁を開かなくても分かる）。色は見出しの帯・頁の札と同じ意味 */
+.master-tabs .tab .tab-state{margin-left:auto;height:18px;padding:0 7px;border-radius:9px;font-size:11px;font-weight:700;line-height:18px}
+.master-tabs .tab .tab-state:empty{display:none}
+.master-tabs .tab .tab-state.local{background:var(--plain-soft);color:var(--plain-ink)}
+.master-tabs .tab .tab-state.shared{background:#e3f4f1;color:#1d6b62}
+.master-tabs .tab .tab-state.off{background:#fff3d6;color:#8a5a00}
+.master-place .place-go[hidden]{display:none}

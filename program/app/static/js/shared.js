@@ -96,6 +96,52 @@
     if (top) { e.preventDefault(); top.close(); }
   });
 
+  /* 書き出したファイルの置き場所の知らせ（右下・閉じるまで残る）。どこから書き出しても（表示列・並び・表示の設定・計算の CSV）同じ所に出る。
+     デスクトップ版は窓（desktop/src/main.rs の on_download）が保存し終えたとき tpa:saved {path, ok} を送るので、置いた場所の全文と
+     「フォルダを開く」「パスをコピー」を出す。届かないとき（ブラウザで開いたとき）は、ブラウザのダウンロード先に置いたと言う。 */
+  const saved = (() => {
+    let el = null, fallback = 0;
+    const close = () => { if (el) { el.remove(); el = null; } };
+    const show = (ok, title, body, path) => {
+      close();
+      el = document.createElement("div");
+      el.className = `tpa-saved${ok ? "" : " is-ng"}`;
+      el.setAttribute("role", "status");
+      el.innerHTML = `<button type="button" class="tpa-saved-x" aria-label="閉じる" title="閉じる">×</button>
+        <b class="tpa-saved-t">${TPA.esc(title)}</b>${body}
+        ${path ? `<div class="tpa-saved-acts"><button type="button" class="is-main" data-act="reveal">フォルダを開く</button><button type="button" data-act="copy">パスをコピー</button></div>` : ""}
+        <small class="tpa-saved-msg" aria-live="polite"></small>`;
+      document.body.appendChild(el);
+      const box = el, msg = (t) => { box.querySelector(".tpa-saved-msg").textContent = t; };
+      box.querySelector(".tpa-saved-x").onclick = close;
+      box.querySelectorAll("[data-act]").forEach((b) => b.onclick = async () => {
+        if (b.dataset.act === "copy") {
+          try { await navigator.clipboard.writeText(path); msg("パスをコピーしました。"); } catch (_) { msg("コピーできませんでした。パスを選んで写してください。"); }
+          return;
+        }
+        try {
+          const r = await fetch("/__desktop/reveal", TPA.json("POST", { path }));
+          if (!r.ok) msg(((await r.json().catch(() => ({}))).error) || "フォルダを開けませんでした。");
+        } catch (_) { msg("フォルダを開けませんでした。"); }
+      });
+    };
+    window.addEventListener("tpa:saved", (e) => {
+      clearTimeout(fallback);
+      const { path, ok } = e.detail || {};
+      if (!ok || !path) { show(false, "✕ 書き出せませんでした", '<span class="tpa-saved-p">保存先に書き込めなかったか、途中で止まりました。もう一度書き出してください。</span>', ""); return; }
+      const name = String(path).split(/[\\/]/).pop();
+      show(true, `✓ 書き出しました「${name}」`, `<span class="tpa-saved-l">置いた場所</span><code class="tpa-saved-p">${TPA.esc(path)}</code>`, path);
+    });
+    return {
+      /** 書き出しを始めた（name: ファイルの名前）。デスクトップ版の知らせが来なければ、ブラウザのダウンロード先と言う */
+      expect(name) {
+        clearTimeout(fallback);
+        fallback = setTimeout(() => show(true, `✓ 書き出しました「${name}」`,
+          '<span class="tpa-saved-p">ブラウザのダウンロード先（ふつうは「ダウンロード」フォルダ）に置きました。ブラウザのダウンロードの一覧（Ctrl＋J）からも開けます。</span>', ""), 2500);
+      },
+    };
+  })();
+
   window.TPA = {
     /** HTML に差し込む文字を無害にする（& < > " ' ）。 */
     esc: (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ESC[c]),
@@ -114,12 +160,13 @@
       measureCtx.font = font;
       return measureCtx.measureText(String(text)).width;
     },
-    /** 作ったファイルを保存させる。 */
+    /** 作ったファイルを保存させ、置いた場所を右下に知らせる。 */
     download(blob, name) {
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = name;
       a.click();
+      saved.expect(name);
       setTimeout(() => URL.revokeObjectURL(a.href), 0);
     },
     /** 設定を JSON のファイルに書き出す（形は WaveLog と同じ {kind, version, savedAt, items}）。読むのは pickJson。 */

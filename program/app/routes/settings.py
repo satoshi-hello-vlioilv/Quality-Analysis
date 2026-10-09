@@ -5,7 +5,7 @@ from ..web import current_app, jsonify, request
 import app_env
 
 from .. import effective_settings
-from ..services import access, path_settings, release_place
+from ..services import access, master_place, path_settings, release_place
 from .common import base_rev, bp, error, master_call, master_repo, me
 from .lotlist import lot_mirror
 
@@ -124,3 +124,38 @@ def release_place_move():
 @bp.get("/api/release/place/progress")
 def release_place_progress():
     return jsonify(_release_mover().progress())
+
+
+# ---- マスタの置き場（共有フォルダ）を変える（services/master_place.py）。変えてよい PC は配布の置き場と同じ
+def _master_place_args():
+    b = request.get_json(silent=True) or {}
+    return b.get("parent", ""), b.get("name", "")
+
+
+@bp.get("/api/masters/place")
+def master_place_get():
+    """いまの置き場（共有か手元のみか・届くか・設定ファイルの値・この PC が覚えた値か）と、変えてよいか。"""
+    st = current_app.config["MASTER_STORE"]
+    s = st.status()
+    denied = _release_place_gate()
+    return jsonify(mode=s["mode"], dir=s["dir"], configured=s["configured"], override=s["override"],
+                   reachable=s.get("reachable", True), history=st.history(), canChange=denied is None,
+                   why=(denied[0].get_json() or {}).get("error", "") if denied else "")
+
+
+@bp.post("/api/masters/place/check")
+def master_place_check():
+    """新しい置き場（上のフォルダ＋名前）へ変えられるか。写すか切り替えるだけか・写す量（master_place.plan）。"""
+    return jsonify(master_place.plan(current_app.config["MASTER_STORE"], *_master_place_args()))
+
+
+@bp.post("/api/masters/place/move")
+def master_place_move():
+    """マスタを写して置き場を変える（この PC は今すぐ・ほかの PC は前の置き場の印をたどって移る）。"""
+    denied = _release_place_gate()
+    if denied:
+        return denied
+    try:
+        return jsonify(master_place.move(current_app.config["MASTER_STORE"], *_master_place_args()))
+    except ValueError as e:
+        return error(str(e), 400, "invalid")
