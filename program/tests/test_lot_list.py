@@ -469,6 +469,19 @@ class ApiTests(Base):
         self.assertEqual(len(d["groups"]), 5)
         self.assertNotIn("groups", self.c.get("/api/lotlist").get_json(), "group=1 のときだけまとめる")
 
+    def test_slicer_lists_values_and_filters_by_them(self):
+        """スライサー: 列の重複なしの値（前後の空白を除く・空欄は最後に 1 つ）と件数。選んだ値（空欄も）で絞り込める。"""
+        d = self.c.get("/api/lotlist/slicer?column=" + "コメント").get_json()
+        self.assertEqual([v["value"] for v in d["values"]], ["尾", "要確認", "頭 30m", ""])
+        self.assertEqual(d["values"][-1]["count"], 2, "None と '' は同じ空欄")
+        f = [{"column": "コメント", "op": "in", "value": json.dumps(["", "尾"])}]
+        self.assertEqual(self.c.get("/api/lotlist?filters=" + json.dumps(f)).get_json()["count"], 3)
+        # 件数はほかの絞り込みのもとで数える。当たらない値も 0 件で並ぶ（選べる）
+        other = [{"column": "発生設備", "op": "eq", "value": "CAL"}]
+        d = self.c.get("/api/lotlist/slicer?column=異常内容&filters=" + json.dumps(other)).get_json()
+        self.assertEqual({v["value"]: (v["count"], v["all"]) for v in d["values"]}, {"ロール疵": (0, 1), "押し疵": (1, 1), "汚れ": (1, 3)})
+        self.assertEqual(self.c.get("/api/lotlist/slicer?column=無い列").status_code, 400)
+
     def test_refresh_and_source(self):
         self.c.get("/api/lotlist")
         d = self.c.post("/api/lotlist/refresh").get_json()

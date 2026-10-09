@@ -3,7 +3,8 @@
 
 絞り込み・並べ替え・ページの組み立ては WaveLog の /api/table（backend/routes/tables.py）と同じ:
     search  … どの列の字でも LIKE（列ごとに OR）
-    filters … [{column, op, value}] を AND（最大 20 件）。op は WaveLog と同じ 12 種＋starts_any
+    filters … [{column, op, value}] を AND（最大 20 件）。op は WaveLog と同じ 12 種＋starts_any＋in
+              （in はスライサー: value は値の JSON 配列で、どれかに当たる行。"" は空欄。key があれば見えている値で比べる）
     sorts   … [{column, dir}]（最大 4 キー）。実在する列だけを通す
     page / page_size … LIMIT / OFFSET
     group   … ロット番号でまとめる（grouped_rows）。並べ替えは効いたまま、ページの境目でロットを切らない
@@ -21,11 +22,15 @@ from .sqlite_ro import connect_ro, numeric_value, qi, to_date
 ALLOWED_OPS = {"contains", "not_contains", "eq", "neq", "starts", "starts_any", "ends",
                "gt", "gte", "lt", "lte", "empty", "not_empty",
                # 今日から数えて N 日（週・か月・年）以内。日付と読める値だけが当たる（ToDate(列) >= 今日−N）
-               "within_days", "within_weeks", "within_months", "within_years"}
+               "within_days", "within_weeks", "within_months", "within_years",
+               # スライサー: 選んだ値のどれか（slice_key で比べる。空欄も選べる）
+               "in"}
 RELATIVE_OPS = {"within_days": "days", "within_weeks": "weeks", "within_months": "months", "within_years": "years"}
 DATE_SAMPLE = 60          # 日付の列か見分けるときに読む値の数
 DATE_RATIO = 0.8          # そのうち日付と読める割合がこれ以上なら日付の列
 MAX_FILTERS = 20
+MAX_IN_VALUES = 1000      # スライサーで一度に選べる値の数
+MAX_SLICER_VALUES = 1000  # スライサーに並べる値の数（超えたら truncated）
 MAX_SORTS = 4
 PAGE_SIZE_MAX = 5000
 PAGE_SIZE_DEFAULT = 500
@@ -91,8 +96,37 @@ def safe_filters(text, cs):
         op = str(it.get("op") or "contains").strip()
         val = str(it.get("value") or "").strip()
         if col in cs and op in ALLOWED_OPS:
-            out.append({"column": col, "op": op, "value": val})
+            f = {"column": col, "op": op, "value": val}
+            if op == "in":
+                f["key"] = slice_key_kind(it.get("key"))
+            out.append(f)
     return out
+
+
+def slice_key_kind(v):
+    """スライサーで値をまとめる形: 日付だけ（date）・年月（month）・年（year）。ほかは ''（そのままの値）。"""
+    k = sort_key_kind(v)
+    return k if k in SORT_KEYS else ""
+
+
+def slice_key(col, key=""):
+    """スライサーの値（見えている値）の式。前後の空白を除き、空は NULL。
+    日付だけ・年月・年で見せている列は、日付と読める値をその形に（時刻が違っても同じ日は 1 つ）。読めない値はそのまま。"""
+    q = qi(col)
+    plain = f"NULLIF(TRIM(CStr({q})), '')"
+    if key in SORT_KEYS:
+        head = {"date": f"ToDate({q})", "month": f"SUBSTR(ToDate({q}), 1, 7)", "year": f"SUBSTR(ToDate({q}), 1, 4)"}[key]
+        return f"COALESCE({head}, {plain})"
+    return plain
+
+
+def in_values(value):
+    """in の値（JSON 配列の文字）→ 字の並び。読めなければ空（何にも当たらない）。"""
+    try:
+        items = json.loads(value) if value else []
+    except ValueError:
+        return []
+    return [x for x in items if isinstance(x, str)][:MAX_IN_VALUES] if isinstance(items, list) else []
 
 
 def cutoff_date(op, value, today=None):
@@ -205,6 +239,13 @@ def build_filter_where(filters, today=None):
             parts.append(f"({col} IS NULL OR CStr({col})='')")
         elif op == "not_empty":
             parts.append(f"({col} IS NOT NULL AND CStr({col})<>'')")
+        elif op == "in":
+            vals = in_values(value)
+            k = slice_key(f["column"], f.get("key", ""))
+            some = [v for v in vals if v != ""]
+            ors = ([f"{k} IN ({','.join('?' * len(some))})"] if some else []) + ([f"{k} IS NULL"] if "" in vals else [])
+            parts.append("(" + " OR ".join(ors) + ")" if ors else "0=1")
+            params += some
         elif op in RELATIVE_OPS:
             parts.append(f"ToDate({col}) >= ?")
             params.append(cutoff_date(op, value, today))
@@ -348,6 +389,40 @@ def _json_value(v):
     if isinstance(v, (bytes, bytearray, memoryview)):
         return f"（バイナリ {len(bytes(v))} バイト）"
     return v
+
+
+def slicer(path, *, column, key="", table="", preferred_table="", search="", filters="", today=None):
+    """スライサーに並べる値（重複なし）と、ほかの絞り込みのもとでの件数。
+    件数 0 の値も出す（今の絞り込みでは当たらないが、選べる値）。並びは SortKey の小さい順で、空欄は最後。"""
+    t0 = time.perf_counter()
+    q = (search or "").strip()
+    with connect_ro(path) as c:
+        names = tables(c)
+        t = table if table in names else pick_table(names, preferred_table)
+        if not t:
+            raise RuntimeError("品質データにテーブルが1つもありません。")
+        cs = columns(c, t, raw_columns(c, t))
+        if column not in cs:
+            raise ValueError(f"列「{column}」がありません。")
+        kind = slice_key_kind(key)
+        where_parts, params = [], []
+        if q:
+            where_parts.append("(" + " OR ".join(f"CStr({qi(x)}) LIKE ?" for x in cs) + ")")
+            params += [f"%{q}%"] * len(cs)
+        fp, fpp = build_filter_where(safe_filters(filters, cs), today)
+        where_parts += fp
+        params += fpp
+        hit = f"SUM(CASE WHEN {' AND '.join(where_parts)} THEN 1 ELSE 0 END)" if where_parts else "COUNT(*)"
+        k = slice_key(column, kind)
+        sql = (f"SELECT v, n, a FROM (SELECT {k} AS v, {hit} AS n, COUNT(*) AS a FROM {qi(t)} GROUP BY 1)"
+               f" ORDER BY v IS NULL, SortKey(v), v LIMIT {MAX_SLICER_VALUES + 1}")
+        rows = c.execute(sql, params).fetchall()
+    return {
+        "table": t, "column": column, "key": kind,
+        "values": [{"value": "" if v is None else str(v), "count": int(n or 0), "all": int(a)} for v, n, a in rows[:MAX_SLICER_VALUES]],
+        "truncated": len(rows) > MAX_SLICER_VALUES,
+        "timing": {"server": round((time.perf_counter() - t0) * 1000)},
+    }
 
 
 def query(path, *, table="", preferred_table="", page=1, page_size=PAGE_SIZE_DEFAULT, search="",

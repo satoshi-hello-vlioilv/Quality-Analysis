@@ -145,6 +145,14 @@
     },
     /** 値だけの深い写し（設定・下書きを元と切り離す）。 */
     clone: (v) => JSON.parse(JSON.stringify(v)),
+    /* 日本語入力（IME）の変換中か。変換中の input・keydown（確定の Enter も）は、まだ打ち終わっていない字なので扱わない */
+    composing: (e) => !!(e && (e.isComposing || e.keyCode === 229)),
+    /** 打った字に応じて fn(el) を呼ぶ。変換中は呼ばず、確定したとき（compositionend）に呼ぶ。
+        変換中に欄を描き直す・探しに行くと、未確定の字が強制確定されてしまう（ローマ字で打てない） */
+    onText(el, fn) {
+      el.addEventListener("input", (e) => { if (!TPA.composing(e)) fn(el, e); });
+      el.addEventListener("compositionend", (e) => fn(el, e));
+    },
 
     /** 重なって開く窓を登録する。Esc（いちばん上の1枚）と、backdrop なら窓の外側（背景）を押したときに close()。 */
     layer(el, close, { backdrop = true } = {}) {

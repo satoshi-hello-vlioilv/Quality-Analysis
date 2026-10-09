@@ -102,7 +102,10 @@ impl Lot {
 
     /// 窓が答える問い合わせなら (状態, 答え)。Python に任せるなら None。
     pub fn handle(&self, method: &str, path: &str, query: &str, ask: AskSettings) -> Option<(u16, Value)> {
-        let mine = matches!((method, path), ("GET", "/api/lotlist") | ("GET", "/api/lotlist/source") | ("POST", "/api/lotlist/refresh"));
+        let mine = matches!(
+            (method, path),
+            ("GET", "/api/lotlist") | ("GET", "/api/lotlist/slicer") | ("GET", "/api/lotlist/source") | ("POST", "/api/lotlist/refresh")
+        );
         if !mine || lotlist::parse_query(query).iter().any(|(k, v)| k == "engine" && v == "python") {
             return None;
         }
@@ -123,6 +126,17 @@ impl Lot {
             }
             _ => match m.read_path() {
                 None => (400, json!({"error": NO_SOURCE, "source": m.source_info()})),
+                // スライサーに並べる値（列の重複なしの値と件数）
+                Some(p) if path == "/api/lotlist/slicer" => {
+                    let today = chrono::Local::now().date_naive();
+                    let qs = lotlist::parse_query(query);
+                    let arg = |k: &str| qs.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone()).unwrap_or_default();
+                    match lotlist::slicer(&p, &Args::from_query(query), &arg("column"), &arg("key"), &s.table, today) {
+                        Ok(v) => (200, v),
+                        Err((st, e)) if st == 400 => (400, json!({"error": e})),
+                        Err((st, e)) => (st, json!({"error": e, "source": m.source_info()})),
+                    }
+                }
                 Some(p) => {
                     let today = chrono::Local::now().date_naive();
                     match lotlist::query(&p, &Args::from_query(query), &s.table, s.page_size, today) {

@@ -66,6 +66,18 @@ def _f(*items):
     return json.dumps([{"column": c, "op": o, "value": v} for c, o, v in items], ensure_ascii=False)
 
 
+def _in(column, values, key=None, raw=None):
+    """スライサーの絞り込み（in）1 つ。values は値の並び（raw を渡せば、その字をそのまま value に）。"""
+    f = {"column": column, "op": "in", "value": raw if raw is not None else json.dumps(values, ensure_ascii=False)}
+    if key is not None:
+        f["key"] = key
+    return f
+
+
+def _fl(*filters):
+    return json.dumps(list(filters), ensure_ascii=False)
+
+
 def _s(*items):
     return json.dumps([{"column": c, "dir": d} for c, d in items], ensure_ascii=False)
 
@@ -131,6 +143,26 @@ CASES = [
                           {"column": "重量", "dir": "asc", "key": "round:x"}, {"column": "板厚", "dir": "asc", "key": 3}], ensure_ascii=False)},
     {"group": True, "page": 2, "page_size": 90,
      "sorts": json.dumps([{"column": "ロット番号", "dir": "asc"}, {"column": "検査日", "dir": "desc", "key": "date"}], ensure_ascii=False)},
+    # スライサー（版 3.15.0）: 選んだ値のどれか（in）。空欄も選べる。見せ方の鍵（日付だけ・年月・年）があれば見えている値で比べる
+    {"filters": _fl(_in("設備", ["CR1", "L-1"]))},
+    {"filters": _fl(_in("客先", ["", "客先A"]), _in("不良名", ["キズ", "汚れ", "無い値"]))},
+    {"filters": _fl(_in("発生日", ["2025-03", "2024-12", ""], key="month"))},
+    {"filters": _fl(_in("発生日", ["2025"], key="YEAR"), _in("入力日時", ["2025-09-17"], key="date"))},
+    {"filters": _fl(_in("重量", ["5828", "1"], key="round:0"))},
+    {"filters": _fl(_in("設備", [], raw="[]"))},
+    {"filters": _fl(_in("設備", [], raw="壊れた"))},
+    {"filters": _fl(_in("設備", [], raw='[1, "CR1", null]'))},
+    {"group": True, "filters": _fl(_in("設備", ["DL2"])), "sorts": _s(("重量", "desc"))},
+    # スライサーに並べる値（slicer）: 列の重複なしの値・ほかの絞り込みのもとでの件数・空欄は最後・1000 を超えたら truncated
+    {"slicer": "設備"},
+    {"slicer": "客先"},
+    {"slicer": "発生日", "key": "date"},
+    {"slicer": "入力日時", "key": "month"},
+    {"slicer": "発生日", "key": "round:2"},
+    {"slicer": "不良名", "search": "客先", "filters": _fl(_in("設備", ["CR1", ""]), {"column": "重量", "op": "gte", "value": "3000"})},
+    {"slicer": "重量"},
+    {"slicer": "設備", "table": "保留"},
+    {"slicer": "無い列"},
 ]
 
 

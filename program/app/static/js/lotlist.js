@@ -490,12 +490,12 @@
 
     // 一覧を検索（打つとすぐ。待ってからまとめて1回）
     let st = null;
-    $("#llSearch").addEventListener("input", (e) => {
+    TPA.onText($("#llSearch"), (el) => {   // 変換中は探しに行かない（確定してから）
       clearTimeout(st);
-      st = setTimeout(() => { S.search = e.target.value.trim(); S.page = 1; load(); }, SEARCH_DEBOUNCE_MS);
+      st = setTimeout(() => { S.search = el.value.trim(); S.page = 1; load(); }, SEARCH_DEBOUNCE_MS);
     });
     $("#llSearch").addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { clearTimeout(st); S.search = e.target.value.trim(); S.page = 1; load(); }
+      if (e.key === "Enter" && !TPA.composing(e)) { clearTimeout(st); S.search = e.target.value.trim(); S.page = 1; load(); }
     });
     $("#llPresetBtn").onclick = (e) => openPresetMenu(e.currentTarget);
     $("#llCondBtn").onclick = () => toggleCondMenu();
@@ -512,8 +512,9 @@
     $("#llAdhocColumn").onchange = () => { adhoc.column = $("#llAdhocColumn").value; saveAdhocSetup(); updateAdhocSuggestions(); renderAdhocRow(); applyAdhoc(true); };
     $("#llAdhocOp").onchange = () => { adhoc.op = $("#llAdhocOp").value; saveAdhocSetup(); renderAdhocRow(); applyAdhoc(true); };
     const box = $("#llAdhocValue");
-    box.addEventListener("input", () => { adhoc.value = box.value; renderAdhocRow(); applyAdhoc(false); });
+    TPA.onText(box, () => { adhoc.value = box.value; renderAdhocRow(); applyAdhoc(false); });
     box.addEventListener("keydown", (e) => {
+      if (TPA.composing(e)) return;   // 変換の確定の Enter・Esc は IME のもの
       if (e.key === "Enter") { e.preventDefault(); adhoc.value = box.value; renderAdhocRow(); applyAdhoc(true); }
       else if (e.key === "Escape" && box.value) { e.preventDefault(); e.stopPropagation(); clearAdhoc(); }
     });
@@ -743,8 +744,9 @@
   }
   function bindTokenSearch() {
     const inp = $("#llTokenSearch");
-    inp.addEventListener("input", () => renderSuggest(inp.value));
+    TPA.onText(inp, () => renderSuggest(inp.value));
     inp.addEventListener("keydown", (e) => {
+      if (TPA.composing(e)) return;   // 変換の確定の Enter で候補を選ばない
       const items = $$(".fs-item", $("#llSuggest"));
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault(); if (!items.length) return;

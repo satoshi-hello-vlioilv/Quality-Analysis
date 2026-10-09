@@ -632,7 +632,7 @@
     const fx = $("#lcFormula");
     window.WL.formula.suggest(fx, { columns: () => ctx.columns.map((k) => label(t, k)) });
     let fxTimer = null;
-    fx.addEventListener("input", () => {
+    TPA.onText(fx, () => {   // 変換中は当てない（描き直すと未確定の字が強制確定される）
       const v = fx.value, chk = v.trim() ? window.WL.formula.check(v) : null, st = $("#lcFxState");
       st.textContent = !v.trim() ? (calc ? "式を入れてください" : "元の値をそのまま出します") : chk.ok ? `使える式です（使っている列: ${chk.columns.join("、") || "なし"}）` : chk.error;
       st.className = "lc-fxstate " + (chk && !chk.ok ? "is-ng" : "is-ok");
@@ -690,7 +690,7 @@
       e.preventDefault(); e.stopPropagation();
       if (!pop.hidden) { showMore(false); more.focus(); } else closePanel();   // Esc は内側から 1 段ずつ
     });
-    $("#lcFilter").addEventListener("input", (e) => { nameQ = e.target.value; renderPanel(); });
+    TPA.onText($("#lcFilter"), (el) => { nameQ = el.value; renderPanel(); });
     $("#lcChips").addEventListener("click", (e) => {
       const b = e.target.closest("[data-chip]"); if (b) { stateChip = stateChip === b.dataset.chip ? "" : b.dataset.chip; renderPanel(); }
       if (e.target.closest("[data-clearq]")) { nameQ = ""; $("#lcFilter").value = ""; renderPanel(); }
